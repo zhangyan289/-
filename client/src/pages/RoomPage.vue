@@ -1033,12 +1033,15 @@ function onDogClick(evt) {
   const myName = me.value?.username
   if (!myName) return
 
-  if (myName === 'userA') {
-    if (dog === 'left') openTodo('userA', true)
-    else if (dog === 'right') openTodo('userB', false)
-  } else if (myName === 'userB') {
-    if (dog === 'right') openTodo('userB', true)
-    else if (dog === 'left') openTodo('userA', false)
+  const leftName = users.value.find((u) => isLeftUser(u.username))?.username || 'userA'
+  const rightName = users.value.find((u) => isRightUser(u.username))?.username || 'userB'
+
+  if (isLeftUser(myName)) {
+    if (dog === 'left') openTodo(leftName, true)
+    else if (dog === 'right') openTodo(rightName, false)
+  } else if (isRightUser(myName)) {
+    if (dog === 'right') openTodo(rightName, true)
+    else if (dog === 'left') openTodo(leftName, false)
   }
 }
 
