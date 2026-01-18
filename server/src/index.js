@@ -21,6 +21,57 @@ dotenv.config({ path: path.join(serverRoot, '.env') })
 const PORT = Number(process.env.PORT || 3000)
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me'
 
+function isPlaceholderSecret(value) {
+  const v = String(value || '').trim()
+  if (!v) return true
+  return v === 'please_change_me' || v === 'dev_secret_change_me'
+}
+
+function requireProdSecrets() {
+  const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+  if (!isProd) return
+
+  const problems = []
+
+  if (isPlaceholderSecret(process.env.JWT_SECRET)) {
+    problems.push('JWT_SECRET 未设置或仍为占位值')
+  }
+
+  if (isPlaceholderSecret(process.env.PRESET_USER_A_PASSWORD)) {
+    problems.push('PRESET_USER_A_PASSWORD 未设置或仍为占位值')
+  }
+
+  if (isPlaceholderSecret(process.env.PRESET_USER_B_PASSWORD)) {
+    problems.push('PRESET_USER_B_PASSWORD 未设置或仍为占位值')
+  }
+
+  if (problems.length) {
+    console.error('[FATAL] 生产环境配置不安全：')
+    for (const p of problems) console.error(`- ${p}`)
+    console.error('请在 server/.env 中配置强随机 JWT_SECRET 与两位用户密码后再启动。')
+    process.exit(1)
+  }
+}
+
+requireProdSecrets()
+
+function getPresetConfig() {
+  const userA = {
+    legacy: 'userA',
+    newName: (process.env.PRESET_USER_A_NAME || '小鸡毛').trim(),
+    newPass: String(process.env.PRESET_USER_A_PASSWORD || 'please_change_me'),
+    legacyPass: 'userA'
+  }
+  const userB = {
+    legacy: 'userB',
+    newName: (process.env.PRESET_USER_B_NAME || '小白').trim(),
+    newPass: String(process.env.PRESET_USER_B_PASSWORD || 'please_change_me'),
+    legacyPass: 'userB'
+  }
+
+  return { userA, userB }
+}
+
 const rawDbPath = process.env.DB_PATH || './data/app.sqlite'
 const DB_PATH = path.isAbsolute(rawDbPath) ? rawDbPath : path.join(serverRoot, rawDbPath)
 
@@ -43,11 +94,12 @@ app.post('/api/auth/login', (req, res) => {
   const rawPass = String(password)
 
   // 兼容旧账号，并支持“新密码首次登录自动迁移”
+  const { userA, userB } = getPresetConfig()
   const presetMap = {
-    '小鸡毛': { legacy: 'userA', newName: '小鸡毛', newPass: '20041203', legacyPass: 'userA' },
-    'userA': { legacy: 'userA', newName: '小鸡毛', newPass: '20041203', legacyPass: 'userA' },
-    '小白': { legacy: 'userB', newName: '小白', newPass: '20041016', legacyPass: 'userB' },
-    'userB': { legacy: 'userB', newName: '小白', newPass: '20041016', legacyPass: 'userB' }
+    [userA.newName]: userA,
+    userA: userA,
+    [userB.newName]: userB,
+    userB: userB
   }
   const preset = presetMap[rawName] || null
 

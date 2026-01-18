@@ -1,12 +1,21 @@
 import bcrypt from 'bcryptjs'
 import { todayISO } from './database.js'
 
-const PRESET_USERS = [
-  { username: '小鸡毛', password: '20041203', legacyUsername: 'userA' },
-  { username: '小白', password: '20041016', legacyUsername: 'userB' }
-]
+function getPresetUsersFromEnv() {
+  const userAName = (process.env.PRESET_USER_A_NAME || '小鸡毛').trim()
+  const userAPass = String(process.env.PRESET_USER_A_PASSWORD || 'please_change_me')
+  const userBName = (process.env.PRESET_USER_B_NAME || '小白').trim()
+  const userBPass = String(process.env.PRESET_USER_B_PASSWORD || 'please_change_me')
+
+  return [
+    { username: userAName, password: userAPass, legacyUsername: 'userA' },
+    { username: userBName, password: userBPass, legacyUsername: 'userB' }
+  ]
+}
 
 export function seedPresetUsers(db) {
+  const PRESET_USERS = getPresetUsersFromEnv()
+
   const findUser = db.prepare('SELECT id FROM users WHERE username = ?')
   const updateUser = db.prepare('UPDATE users SET username = ?, password_hash = ? WHERE id = ?')
   const updatePass = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')

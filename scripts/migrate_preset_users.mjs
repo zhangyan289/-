@@ -8,8 +8,16 @@ const db = new Database(dbFile)
 db.pragma('foreign_keys = ON')
 
 const presets = /** @type {{ legacy: string, newName: string, newPass: string }[]} */ ([
-  { legacy: 'userA', newName: '小鸡毛', newPass: '20041203' },
-  { legacy: 'userB', newName: '小白', newPass: '20041016' }
+  {
+    legacy: 'userA',
+    newName: (process.env.PRESET_USER_A_NAME || '小鸡毛').trim(),
+    newPass: String(process.env.PRESET_USER_A_PASSWORD || 'please_change_me')
+  },
+  {
+    legacy: 'userB',
+    newName: (process.env.PRESET_USER_B_NAME || '小白').trim(),
+    newPass: String(process.env.PRESET_USER_B_PASSWORD || 'please_change_me')
+  }
 ])
 
 const findByName = db.prepare('SELECT id, username FROM users WHERE username = ?')

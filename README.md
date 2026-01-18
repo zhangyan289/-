@@ -4,10 +4,11 @@
 - `client/`：Vue 3 + Vite 前端（开发阶段占位素材）
 - `server/`：Node.js + Express + SQLite 后端（同域托管前端静态资源）
 
-## 预设账号
-XXX
+## 账号说明（公开仓库安全）
+本项目会在首次启动时初始化两个账号（用于两人自习室）。
 
-> 可在 `server/src/db/seed.js` 修改。
+- 生产环境请务必通过环境变量设置用户名/密码（不要把任何密码写进 README 或提交到 Git 仓库）。
+- 配置方式见 `server/.env.example`（复制为 `server/.env` 后修改）。
 
 ## 本地开发
 1. 安装依赖：
