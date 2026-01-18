@@ -1057,6 +1057,18 @@ function tryLoadVideo(url) {
   })
 }
 
+function canBrowserPlayVideoUrl(url) {
+  try {
+    const v = document.createElement('video')
+    const lower = String(url || '').toLowerCase()
+    if (lower.endsWith('.webm')) return v.canPlayType('video/webm') !== ''
+    if (lower.endsWith('.mp4')) return v.canPlayType('video/mp4') !== ''
+    return true
+  } catch {
+    return false
+  }
+}
+
 function tryLoadImg(url) {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -1203,6 +1215,7 @@ function onHotspotsLeave() {
 
 async function tryPickFirstUsableVideo(urls) {
   for (const url of urls) {
+    if (!canBrowserPlayVideoUrl(url)) continue
     try {
       await tryLoadVideo(url)
       return url
@@ -1282,10 +1295,10 @@ async function applySceneFx(id) {
 
   // 允许用户提供每个场景单独的透明 overlay 视频（比 Canvas 更“像真特效”）
   sceneFxOverlaySrc.value = await tryPickFirstUsableVideo([
-    `/assets/user/fx_scene${n}.webm`,
     `/assets/user/fx_scene${n}.mp4`,
-    `/assets/user/overlay_scene${n}.webm`,
-    `/assets/user/overlay_scene${n}.mp4`
+    `/assets/user/fx_scene${n}.webm`,
+    `/assets/user/overlay_scene${n}.mp4`,
+    `/assets/user/overlay_scene${n}.webm`
   ])
 
   // palette: 用当前背景图取平均色，做更“贴图”的特效色调
@@ -1401,10 +1414,12 @@ async function applyScene(id, { persist } = { persist: false }) {
 
     if (!picked) {
       try {
-        await tryLoadVideo('/assets/user/bg.webm')
-        kind.value = 'video'
-        src.value = '/assets/user/bg.webm'
-        picked = true
+        if (canBrowserPlayVideoUrl('/assets/user/bg.mp4')) {
+          await tryLoadVideo('/assets/user/bg.mp4')
+          kind.value = 'video'
+          src.value = '/assets/user/bg.mp4'
+          picked = true
+        }
       } catch {
         // ignore
       }
@@ -1412,10 +1427,12 @@ async function applyScene(id, { persist } = { persist: false }) {
 
     if (!picked) {
       try {
-        await tryLoadVideo('/assets/user/bg.mp4')
-        kind.value = 'video'
-        src.value = '/assets/user/bg.mp4'
-        picked = true
+        if (canBrowserPlayVideoUrl('/assets/user/bg.webm')) {
+          await tryLoadVideo('/assets/user/bg.webm')
+          kind.value = 'video'
+          src.value = '/assets/user/bg.webm'
+          picked = true
+        }
       } catch {
         // ignore
       }
@@ -1472,12 +1489,12 @@ onMounted(async () => {
   // 2) overlays（尽量不影响清晰度）：透明 petals / ripples
   try {
     petalsOverlaySrc.value = await tryPickFirstUsableVideo([
-      '/assets/user/overlay_petals.webm',
-      '/assets/user/overlay_petals.mp4'
+      '/assets/user/overlay_petals.mp4',
+      '/assets/user/overlay_petals.webm'
     ])
     ripplesOverlaySrc.value = await tryPickFirstUsableVideo([
-      '/assets/user/overlay_ripples.webm',
-      '/assets/user/overlay_ripples.mp4'
+      '/assets/user/overlay_ripples.mp4',
+      '/assets/user/overlay_ripples.webm'
     ])
   } catch (e) {
     console.warn('[bg] overlay load failed', e)
