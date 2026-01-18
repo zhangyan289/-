@@ -36,6 +36,7 @@
       loop
       playsinline
       preload="auto"
+      @error="onPetalsVideoError"
     />
     <div v-else-if="showPetals" class="petals-layer" :class="{ 'petals-off': reduceMotion }">
       <span
@@ -55,6 +56,7 @@
       loop
       playsinline
       preload="auto"
+      @error="onRipplesVideoError"
     />
     <div v-else-if="showWaves" class="ripples-layer" :class="{ 'ripples-off': reduceMotion }" />
 
@@ -69,6 +71,7 @@
       loop
       playsinline
       preload="auto"
+      @error="onSceneFxVideoError"
     />
     <canvas
       v-else-if="sceneFxTypes.length && !reduceMotion"
@@ -1057,6 +1060,36 @@ function tryLoadVideo(url) {
   })
 }
 
+async function probeVideoUrlExists(url) {
+  // 在部分移动端（尤其 QQ 浏览器）里，离屏 video 预加载失败也可能触发全屏“播放失败”。
+  // 这里优先用 HEAD/Range 做“是否存在”的轻量探测，避免触发播放器解码流程。
+  try {
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-store' })
+    if (res.ok) {
+      const ct = String(res.headers.get('content-type') || '').toLowerCase()
+      if (ct && !(ct.startsWith('video/') || ct.startsWith('application/octet-stream'))) return false
+      return true
+    }
+  } catch {
+    // ignore
+  }
+
+  // fallback: 某些服务器/代理不支持 HEAD
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Range: 'bytes=0-0' }
+    })
+    if (!(res.ok || res.status === 206)) return false
+    const ct = String(res.headers.get('content-type') || '').toLowerCase()
+    if (ct && !(ct.startsWith('video/') || ct.startsWith('application/octet-stream'))) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
 function canBrowserPlayVideoUrl(url) {
   try {
     const v = document.createElement('video')
@@ -1216,14 +1249,21 @@ function onHotspotsLeave() {
 async function tryPickFirstUsableVideo(urls) {
   for (const url of urls) {
     if (!canBrowserPlayVideoUrl(url)) continue
-    try {
-      await tryLoadVideo(url)
-      return url
-    } catch {
-      // ignore
-    }
+    if (await probeVideoUrlExists(url)) return url
   }
   return ''
+}
+
+function onPetalsVideoError() {
+  petalsOverlaySrc.value = ''
+}
+
+function onRipplesVideoError() {
+  ripplesOverlaySrc.value = ''
+}
+
+function onSceneFxVideoError() {
+  sceneFxOverlaySrc.value = ''
 }
 
 function fallbackToPlaceholder() {
@@ -1414,8 +1454,7 @@ async function applyScene(id, { persist } = { persist: false }) {
 
     if (!picked) {
       try {
-        if (canBrowserPlayVideoUrl('/assets/user/bg.mp4')) {
-          await tryLoadVideo('/assets/user/bg.mp4')
+        if (canBrowserPlayVideoUrl('/assets/user/bg.mp4') && await probeVideoUrlExists('/assets/user/bg.mp4')) {
           kind.value = 'video'
           src.value = '/assets/user/bg.mp4'
           picked = true
@@ -1427,8 +1466,7 @@ async function applyScene(id, { persist } = { persist: false }) {
 
     if (!picked) {
       try {
-        if (canBrowserPlayVideoUrl('/assets/user/bg.webm')) {
-          await tryLoadVideo('/assets/user/bg.webm')
+        if (canBrowserPlayVideoUrl('/assets/user/bg.webm') && await probeVideoUrlExists('/assets/user/bg.webm')) {
           kind.value = 'video'
           src.value = '/assets/user/bg.webm'
           picked = true
