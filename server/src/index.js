@@ -152,10 +152,34 @@ app.post('/api/auth/login', (req, res) => {
   return res.json({ token })
 })
 
-const requireAuth = authRequired({ jwtSecret: JWT_SECRET })
+// 在线状态（presence）：记录每个用户最近一次请求的时间戳。
+// 轻量实现：内存 Map（重启会清空），足够用于“对方在线/离线”提示。
+const PRESENCE_ONLINE_MS = 60 * 1000
+const presenceLastSeenMs = new Map()
+function touchPresence(username) {
+  const name = String(username || '').trim()
+  if (!name) return
+  presenceLastSeenMs.set(name, Date.now())
+}
+
+const requireAuth = authRequired({
+  jwtSecret: JWT_SECRET,
+  onAuthenticated: (req) => touchPresence(req.user?.username)
+})
 
 app.get('/api/me', requireAuth, (req, res) => {
   return res.json({ user: { id: req.user.id, username: req.user.username } })
+})
+
+app.get('/api/presence', requireAuth, (req, res) => {
+  const nowMs = Date.now()
+  const all = readAllUsers()
+  const users = all.map((u) => {
+    const lastSeenMs = presenceLastSeenMs.get(u.username) || null
+    const online = lastSeenMs ? nowMs - lastSeenMs <= PRESENCE_ONLINE_MS : false
+    return { username: u.username, lastSeenMs, online }
+  })
+  return res.json({ serverNowMs: nowMs, onlineThresholdMs: PRESENCE_ONLINE_MS, users })
 })
 
 function readAllUsers() {

@@ -1,7 +1,7 @@
 <template>
   <div class="room">
     <!-- 左上角倒计时：红色数字 + 下拉管理（考研 + 自定义） -->
-    <div class="corner-countdown" :class="{ 'is-open': showCountdownMenu }" aria-label="countdown">
+    <div class="corner-countdown" ref="countdownCornerEl" :class="{ 'is-open': showCountdownMenu }" aria-label="countdown">
       <div class="corner-countdown-btn">
         <div class="corner-countdown-row">
           <img
@@ -25,10 +25,21 @@
         </div>
       </div>
 
-      <div v-if="showCountdownMenu" class="countdown-menu" role="menu">
+      <div
+        v-if="showCountdownMenu"
+        ref="countdownMenuEl"
+        class="countdown-menu"
+        role="menu"
+        :style="{ left: `${countdownMenuPos.x}px`, top: `${countdownMenuPos.y}px` }"
+      >
         <div class="countdown-menu-head">
           <div class="countdown-menu-title">倒计时</div>
-          <button class="simple-btn" style="height:36px; padding:0 12px;" @click="showCountdownMenu = false">关闭</button>
+          <div class="menu-head-actions">
+            <div class="menu-drag-handle" title="拖动" @pointerdown="startCornerMenuDrag('countdown', $event)">
+              <img :src="dragHandleIcon" alt="drag" class="menu-drag-icon" draggable="false" @dragstart.prevent />
+            </div>
+            <button class="simple-btn" style="height:36px; padding:0 12px;" @click="showCountdownMenu = false">关闭</button>
+          </div>
         </div>
 
         <div class="countdown-section">
@@ -59,7 +70,7 @@
     </div>
 
     <!-- 左上角音乐入口：按钮 + 下拉（跳转主流音乐网站） -->
-    <div class="corner-music" :class="{ 'is-open': showMusicMenu }" aria-label="music">
+    <div class="corner-music" ref="musicCornerEl" :class="{ 'is-open': showMusicMenu }" aria-label="music">
       <div class="corner-music-btn">
         <div class="corner-music-row">
           <img
@@ -99,10 +110,21 @@
         </div>
       </div>
 
-      <div v-if="showMusicMenu" class="music-menu" role="menu">
+      <div
+        v-if="showMusicMenu"
+        ref="musicMenuEl"
+        class="music-menu"
+        role="menu"
+        :style="{ left: `${musicMenuPos.x}px`, top: `${musicMenuPos.y}px` }"
+      >
         <div class="music-menu-head">
           <div class="music-menu-title">音乐</div>
-          <button class="simple-btn" style="height:36px; padding:0 12px;" @click="showMusicMenu = false">关闭</button>
+          <div class="menu-head-actions">
+            <div class="menu-drag-handle" title="拖动" @pointerdown="startCornerMenuDrag('music', $event)">
+              <img :src="dragHandleIcon" alt="drag" class="menu-drag-icon" draggable="false" @dragstart.prevent />
+            </div>
+            <button class="simple-btn" style="height:36px; padding:0 12px;" @click="showMusicMenu = false">关闭</button>
+          </div>
         </div>
 
         <div class="music-links">
@@ -119,7 +141,7 @@
     </div>
 
     <!-- 左上角留言箱：非实时留言（在音乐下面） -->
-    <div class="corner-message" :class="{ 'is-open': showMessageMenu }" aria-label="message">
+    <div class="corner-message" ref="messageCornerEl" :class="{ 'is-open': showMessageMenu }" aria-label="message">
       <div class="corner-message-btn">
         <div class="corner-message-row">
           <img
@@ -159,10 +181,19 @@
         </div>
       </div>
 
-      <div v-if="showMessageMenu" class="message-menu" role="menu">
+      <div
+        v-if="showMessageMenu"
+        ref="messageMenuEl"
+        class="message-menu"
+        role="menu"
+        :style="{ left: `${messageMenuPos.x}px`, top: `${messageMenuPos.y}px` }"
+      >
         <div class="message-menu-head">
           <div class="message-menu-title">留言箱</div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div class="menu-head-actions">
+            <div class="menu-drag-handle" title="拖动" @pointerdown="startCornerMenuDrag('message', $event)">
+              <img :src="dragHandleIcon" alt="drag" class="menu-drag-icon" draggable="false" @dragstart.prevent />
+            </div>
             <button class="simple-btn" style="height:36px; padding:0 12px;" @click="loadMessagesFromServer">刷新</button>
             <button class="simple-btn" style="height:36px; padding:0 12px;" @click="showMessageMenu = false">关闭</button>
           </div>
@@ -220,6 +251,9 @@
           <div class="hud-timer-text">今日学习总时长：{{ formatSeconds(meTodaySecondsLive) }}</div>
           <button class="simple-btn" @click="openHistory">学习记录</button>
           <div class="hud-timer-text" :style="{ opacity: 0.75 }">运行中：{{ running ? '是' : '否' }}</div>
+          <div v-if="otherUser" class="hud-timer-text" :style="{ opacity: 0.80 }">
+            对方：<span class="presence-badge" :class="otherUserOnline ? 'presence-online' : 'presence-offline'">{{ otherUserOnline ? '在线' : '离线' }}</span>
+          </div>
         </div>
       </div>
 
@@ -312,6 +346,9 @@
             {{ todoEditable ? '可编辑' : '只读' }}
           </div>
           <div class="todo-today" v-if="todoUser">今日学习总时长：{{ formatSeconds(todoTodaySecondsLive) }}</div>
+          <div v-if="todoUser" class="todo-presence">
+            <span class="presence-badge" :class="todoUserOnline ? 'presence-online' : 'presence-offline'">{{ todoUserOnline ? '在线' : '离线' }}</span>
+          </div>
         </div>
 
         <div v-if="todoEditable" class="todo-tools">
@@ -409,7 +446,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -577,6 +614,38 @@ const messageLoading = ref(false)
 const messageSending = ref(false)
 const messageError = ref('')
 
+// 在线状态（presence）：前端轮询 /api/presence
+const presenceByName = ref({})
+let presenceTimer = null
+
+function isUserOnline(username) {
+  const name = String(username || '').trim()
+  if (!name) return false
+  return Boolean(presenceByName.value?.[name]?.online)
+}
+
+const otherUser = computed(() => {
+  const myName = me.value?.username
+  if (!myName) return null
+  return users.value.find((u) => u.username && u.username !== myName) || null
+})
+
+const otherUserOnline = computed(() => isUserOnline(otherUser.value?.username))
+
+async function loadPresence() {
+  try {
+    const data = await apiGet('/api/presence')
+    const map = {}
+    for (const u of Array.isArray(data?.users) ? data.users : []) {
+      if (!u?.username) continue
+      map[u.username] = { username: u.username, online: Boolean(u.online), lastSeenMs: u.lastSeenMs ?? null }
+    }
+    presenceByName.value = map
+  } catch (_) {
+    // ignore: presence 失败不影响主流程
+  }
+}
+
 function formatMessageTime(iso) {
   try {
     if (!iso) return ''
@@ -728,6 +797,9 @@ async function toggleCountdownMenu() {
     showMusicMenu.value = false
     // 打开时拉取最新共享状态，便于两人共同编辑
     await loadCountdownFromServer()
+    await nextTick()
+    initCornerMenuPosIfNeeded('countdown')
+    ensureCornerMenuPosInView('countdown')
   }
 }
 
@@ -737,6 +809,10 @@ function toggleMusicMenu() {
   if (next) {
     showCountdownMenu.value = false
     showMessageMenu.value = false
+    nextTick(() => {
+      initCornerMenuPosIfNeeded('music')
+      ensureCornerMenuPosInView('music')
+    })
   }
 }
 
@@ -747,6 +823,9 @@ async function toggleMessageMenu() {
     showCountdownMenu.value = false
     showMusicMenu.value = false
     await loadMessagesFromServer()
+    await nextTick()
+    initCornerMenuPosIfNeeded('message')
+    ensureCornerMenuPosInView('message')
   }
 }
 
@@ -859,6 +938,37 @@ function todaySecondsForUser(u) {
 const meTodaySecondsLive = computed(() => (meUser.value ? todaySecondsForUser(meUser.value) : 0))
 const todoTodaySecondsLive = computed(() => (todoUser.value ? todaySecondsForUser(todoUser.value) : 0))
 
+const todoUserOnline = computed(() => isUserOnline(todoUser.value?.username))
+
+// Todo 打开时更高频刷新今日秒数（近实时看到对方变化）
+let todoLiveTimer = null
+
+async function refreshOverviewSecondsOnly() {
+  try {
+    const overview = await apiGet('/api/overview/today')
+    const byName = new Map(
+      (Array.isArray(overview?.users) ? overview.users : []).map((u) => [u.username, Number(u?.todayStudySeconds || 0)])
+    )
+    users.value = (users.value || []).map((u) => {
+      if (!u?.username) return u
+      if (!byName.has(u.username)) return u
+      return { ...u, todayStudySeconds: byName.get(u.username) }
+    })
+  } catch (_) {
+    // ignore
+  }
+}
+
+watch(showTodo, (open) => {
+  if (todoLiveTimer) clearInterval(todoLiveTimer)
+  todoLiveTimer = null
+  if (!open) return
+  refreshOverviewSecondsOnly()
+  todoLiveTimer = setInterval(() => {
+    refreshOverviewSecondsOnly()
+  }, 5000)
+})
+
 const todoPos = ref({ x: 0, y: 0 })
 let todoDragActive = false
 let todoDragOffsetX = 0
@@ -958,6 +1068,162 @@ function stopTodoDrag() {
   window.removeEventListener('pointermove', onTodoDragMove)
   window.removeEventListener('pointerup', stopTodoDrag)
   saveTodoPos()
+}
+
+// 左上三个菜单：可拖拽（解决平板遮挡问题）
+const countdownCornerEl = ref(null)
+const musicCornerEl = ref(null)
+const messageCornerEl = ref(null)
+
+const countdownMenuEl = ref(null)
+const musicMenuEl = ref(null)
+const messageMenuEl = ref(null)
+
+const countdownMenuPos = ref({ x: 12, y: 72 })
+const musicMenuPos = ref({ x: 12, y: 140 })
+const messageMenuPos = ref({ x: 12, y: 210 })
+
+let cornerDragActive = false
+let cornerDragKey = ''
+let cornerDragOffsetX = 0
+let cornerDragOffsetY = 0
+
+function cornerPosRef(key) {
+  if (key === 'countdown') return countdownMenuPos
+  if (key === 'music') return musicMenuPos
+  return messageMenuPos
+}
+
+function cornerMenuElRef(key) {
+  if (key === 'countdown') return countdownMenuEl
+  if (key === 'music') return musicMenuEl
+  return messageMenuEl
+}
+
+function cornerAnchorElRef(key) {
+  if (key === 'countdown') return countdownCornerEl
+  if (key === 'music') return musicCornerEl
+  return messageCornerEl
+}
+
+function cornerMenuStorageKey(key) {
+  return `cornerMenuPos:${key}`
+}
+
+function loadCornerMenuPos(key) {
+  try {
+    const raw = localStorage.getItem(cornerMenuStorageKey(key))
+    if (!raw) return
+    const obj = JSON.parse(raw)
+    if (typeof obj?.x === 'number' && typeof obj?.y === 'number') {
+      cornerPosRef(key).value = { x: obj.x, y: obj.y }
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+
+function saveCornerMenuPos(key) {
+  try {
+    localStorage.setItem(cornerMenuStorageKey(key), JSON.stringify(cornerPosRef(key).value))
+  } catch (_) {
+    // ignore
+  }
+}
+
+function menuSizeForKey(key) {
+  const el = cornerMenuElRef(key).value
+  const w = window.innerWidth || 1200
+  const h = window.innerHeight || 800
+
+  const fallback =
+    key === 'countdown'
+      ? { w: Math.min(520, w - 24), h: Math.min(520, h - 24) }
+      : key === 'music'
+        ? { w: Math.min(320, w - 24), h: Math.min(360, h - 24) }
+        : { w: Math.min(460, w - 24), h: Math.min(560, h - 24) }
+
+  if (!el) return fallback
+  try {
+    const rect = el.getBoundingClientRect()
+    const ww = Math.max(160, Math.min(rect.width || fallback.w, w - 24))
+    const hh = Math.max(120, Math.min(rect.height || fallback.h, h - 24))
+    return { w: ww, h: hh }
+  } catch {
+    return fallback
+  }
+}
+
+function ensureCornerMenuPosInView(key) {
+  const w = window.innerWidth || 1200
+  const h = window.innerHeight || 800
+  const { w: panelW, h: panelH } = menuSizeForKey(key)
+  const pos = cornerPosRef(key).value
+  cornerPosRef(key).value = {
+    x: clamp(pos.x, 12, Math.max(12, w - panelW - 12)),
+    y: clamp(pos.y, 12, Math.max(12, h - panelH - 12))
+  }
+}
+
+function initCornerMenuPosIfNeeded(key) {
+  const pos = cornerPosRef(key).value
+  if (Number.isFinite(pos?.x) && Number.isFinite(pos?.y) && (pos.x > 0 || pos.y > 0)) return
+  const anchor = cornerAnchorElRef(key).value
+  if (!anchor) return
+  try {
+    const rect = anchor.getBoundingClientRect()
+    cornerPosRef(key).value = {
+      x: Math.floor(rect.left),
+      y: Math.floor(rect.bottom + 10)
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+
+function startCornerMenuDrag(key, e) {
+  if (!e) return
+  const posRef = cornerPosRef(key)
+  if (!posRef) return
+  e.preventDefault()
+  e.stopPropagation()
+
+  cornerDragActive = true
+  cornerDragKey = key
+  cornerDragOffsetX = e.clientX - posRef.value.x
+  cornerDragOffsetY = e.clientY - posRef.value.y
+
+  try {
+    e.currentTarget?.setPointerCapture?.(e.pointerId)
+  } catch (_) {
+    // ignore
+  }
+
+  window.addEventListener('pointermove', onCornerMenuDragMove)
+  window.addEventListener('pointerup', stopCornerMenuDrag)
+}
+
+function onCornerMenuDragMove(e) {
+  if (!cornerDragActive || !cornerDragKey) return
+  const w = window.innerWidth || 1200
+  const h = window.innerHeight || 800
+  const { w: panelW, h: panelH } = menuSizeForKey(cornerDragKey)
+  const nextX = e.clientX - cornerDragOffsetX
+  const nextY = e.clientY - cornerDragOffsetY
+  cornerPosRef(cornerDragKey).value = {
+    x: clamp(nextX, 12, Math.max(12, w - panelW - 12)),
+    y: clamp(nextY, 12, Math.max(12, h - panelH - 12))
+  }
+}
+
+function stopCornerMenuDrag() {
+  if (!cornerDragKey) return
+  const key = cornerDragKey
+  cornerDragActive = false
+  cornerDragKey = ''
+  window.removeEventListener('pointermove', onCornerMenuDragMove)
+  window.removeEventListener('pointerup', stopCornerMenuDrag)
+  saveCornerMenuPos(key)
 }
 
 const todoUser = computed(() => {
@@ -1443,8 +1709,15 @@ onMounted(async () => {
   window.addEventListener('bg-dog-click', onDogClick)
   document.addEventListener('pointerdown', onDocumentPointerDown)
   loadTodoPos()
+  loadCornerMenuPos('countdown')
+  loadCornerMenuPos('music')
+  loadCornerMenuPos('message')
   loadCountdownCache()
   await refresh()
+  await loadPresence()
+  presenceTimer = setInterval(() => {
+    loadPresence()
+  }, 10000)
   loadPomodoroState()
   await loadCountdownFromServer()
   countdownLoaded.value = true
@@ -1464,6 +1737,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('bg-dog-click', onDogClick)
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   if (countdownSaveTimer) clearTimeout(countdownSaveTimer)
+  if (presenceTimer) clearInterval(presenceTimer)
+  presenceTimer = null
+  if (todoLiveTimer) clearInterval(todoLiveTimer)
+  todoLiveTimer = null
+  stopCornerMenuDrag()
 })
 
 // 番茄钟：使用现有 now 定时器驱动（无需额外 setInterval）
@@ -1614,9 +1892,9 @@ watchEffect(() => {
 }
 
 .message-menu{
-  position: absolute;
-  left: 0;
-  top: calc(100% + 10px);
+  position: fixed;
+  left: 12px;
+  top: 210px;
   width: min(460px, calc(100vw - 32px));
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.92);
@@ -1636,6 +1914,35 @@ watchEffect(() => {
   gap: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(20, 10, 18, 0.10);
+}
+
+.menu-head-actions{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-drag-handle{
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 10, 18, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.menu-drag-handle:active{
+  cursor: grabbing;
+}
+
+.menu-drag-icon{
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
 }
 
 .message-menu-title{
@@ -1794,9 +2101,9 @@ watchEffect(() => {
 }
 
 .music-menu{
-  position: absolute;
-  left: 0;
-  top: calc(100% + 10px);
+  position: fixed;
+  left: 12px;
+  top: 140px;
   width: min(320px, calc(100vw - 32px));
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.92);
@@ -1914,9 +2221,9 @@ watchEffect(() => {
 }
 
 .countdown-menu{
-  position: absolute;
-  left: 0;
-  top: calc(100% + 10px);
+  position: fixed;
+  left: 12px;
+  top: 72px;
   margin-top: 0;
   width: min(520px, calc(100vw - 32px));
   border-radius: 16px;
@@ -2585,6 +2892,38 @@ watchEffect(() => {
 .todo-today{
   font-weight: 900;
   opacity: 0.92;
+}
+
+.todo-presence{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 60px;
+}
+
+.presence-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-weight: 950;
+  letter-spacing: 1px;
+  font-size: 12px;
+  border: 1px solid rgba(20, 10, 18, 0.12);
+}
+
+.presence-online{
+  background: rgba(60, 200, 120, 0.16);
+  border-color: rgba(60, 200, 120, 0.28);
+  color: rgba(20, 90, 50, 0.92);
+}
+
+.presence-offline{
+  background: rgba(120, 120, 140, 0.14);
+  border-color: rgba(120, 120, 140, 0.24);
+  color: rgba(60, 60, 75, 0.90);
 }
 
 .todo-tools{
