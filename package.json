@@ -1,0 +1,14 @@
+{
+  "name": "online-study-room",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "npm run start -w server"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules/
+**/node_modules/
+
+# SQLite
+server/data/
+data/
+server/**/*.sqlite
+server/**/*.sqlite-*
+
+# Vite build
+client/dist/
+
+# env
+server/.env

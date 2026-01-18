@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#fff8fb"/>
+      <stop offset="1" stop-color="#f4fbff"/>
+    </linearGradient>
+    <radialGradient id="soft" cx="50%" cy="40%" r="70%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="speck" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="4" r="1.2" fill="#ffd7e7" opacity="0.18"/>
+      <circle cx="18" cy="14" r="0.9" fill="#cfefff" opacity="0.14"/>
+    </pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#base)"/>
+  <rect width="1920" height="1080" fill="url(#soft)"/>
+  <rect width="1920" height="1080" fill="url(#speck)" opacity="0.55"/>
+</svg>
