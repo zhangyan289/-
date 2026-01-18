@@ -5,8 +5,7 @@
 - `server/`：Node.js + Express + SQLite 后端（同域托管前端静态资源）
 
 ## 预设账号
-- 小鸡毛 / 20041203
-- 小白 / 20041016
+XXX
 
 > 可在 `server/src/db/seed.js` 修改。
 
