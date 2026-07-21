@@ -278,7 +278,8 @@
 
           <div class="hud-pomo-actions">
             <button class="simple-btn" @click="togglePomodoro">{{ pomoRunning ? '暂停' : '开始' }}</button>
-            <button class="simple-btn" @click="resetPomodoro">重置</button>
+            <button class="simple-btn" @click="resetPomodoro">重置时间</button>
+            <button class="simple-btn" @click="resetPomodoroCompleted" :disabled="pomoCompleted <= 0">清零次数</button>
             <button class="simple-btn" @click="skipPomodoro">跳过</button>
           </div>
         </div>
@@ -632,18 +633,32 @@ const otherUser = computed(() => {
 
 const otherUserOnline = computed(() => isUserOnline(otherUser.value?.username))
 
+let presenceLoading = false
+let presenceLastFetchedMs = 0
+const PRESENCE_MIN_INTERVAL_MS = 1000
+
 async function loadPresence() {
+  if (presenceLoading) return
+  presenceLoading = true
   try {
-    const data = await apiGet('/api/presence')
+    const data = await apiGet('/api/presence', { timeoutMs: 5000 })
     const map = {}
     for (const u of Array.isArray(data?.users) ? data.users : []) {
       if (!u?.username) continue
       map[u.username] = { username: u.username, online: Boolean(u.online), lastSeenMs: u.lastSeenMs ?? null }
     }
     presenceByName.value = map
+    presenceLastFetchedMs = Date.now()
   } catch (_) {
     // ignore: presence 失败不影响主流程
+  } finally {
+    presenceLoading = false
   }
+}
+
+function throttledLoadPresence() {
+  if (Date.now() - presenceLastFetchedMs < PRESENCE_MIN_INTERVAL_MS) return
+  loadPresence()
 }
 
 function formatMessageTime(iso) {
@@ -839,6 +854,7 @@ function onDocumentPointerDown(e) {
   showCountdownMenu.value = false
   showMusicMenu.value = false
   showMessageMenu.value = false
+  throttledLoadPresence()
 }
 
 watch(
@@ -1361,8 +1377,8 @@ function mergeHistory(existing, incoming, direction) {
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 }
 
-async function apiGet(path) {
-  const res = await fetch(path, { headers: authHeaders() })
+async function apiGet(path, opts = {}) {
+  const res = await fetchWithTimeout(path, { headers: authHeaders(), ...opts })
   const data = await res.json()
   if (res.status === 401) {
     localStorage.removeItem('token')
@@ -1373,8 +1389,8 @@ async function apiGet(path) {
   return data
 }
 
-async function apiPost(path, body) {
-  const res = await fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
+async function apiPost(path, body, opts = {}) {
+  const res = await fetchWithTimeout(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body), ...opts })
   const data = await res.json()
   if (res.status === 401) {
     localStorage.removeItem('token')
@@ -1385,8 +1401,8 @@ async function apiPost(path, body) {
   return data
 }
 
-async function apiPatch(path, body) {
-  const res = await fetch(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) })
+async function apiPatch(path, body, opts = {}) {
+  const res = await fetchWithTimeout(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body), ...opts })
   const data = await res.json()
   if (res.status === 401) {
     localStorage.removeItem('token')
@@ -1397,8 +1413,8 @@ async function apiPatch(path, body) {
   return data
 }
 
-async function apiPut(path, body) {
-  const res = await fetch(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) })
+async function apiPut(path, body, opts = {}) {
+  const res = await fetchWithTimeout(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body), ...opts })
   const data = await res.json()
   if (res.status === 401) {
     localStorage.removeItem('token')
@@ -1409,8 +1425,8 @@ async function apiPut(path, body) {
   return data
 }
 
-async function apiDelete(path) {
-  const res = await fetch(path, { method: 'DELETE', headers: authHeaders() })
+async function apiDelete(path, opts = {}) {
+  const res = await fetchWithTimeout(path, { method: 'DELETE', headers: authHeaders(), ...opts })
   const data = await res.json()
   if (res.status === 401) {
     localStorage.removeItem('token')
@@ -1419,6 +1435,26 @@ async function apiDelete(path) {
   }
   if (!res.ok) throw new Error(data?.error || '请求失败')
   return data
+}
+
+function fetchWithTimeout(url, options = {}) {
+  const timeoutMs = Number(options?.timeoutMs) || 15000
+  const fetchOptions = { ...options }
+  delete fetchOptions.timeoutMs
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController()
+    const id = setTimeout(() => controller.abort(), timeoutMs)
+    fetch(url, { ...fetchOptions, signal: controller.signal })
+      .then((res) => {
+        clearTimeout(id)
+        resolve(res)
+      })
+      .catch((err) => {
+        clearTimeout(id)
+        if (err.name === 'AbortError') reject(new Error('请求超时'))
+        else reject(err)
+      })
+  })
 }
 
 async function refresh() {
@@ -1656,6 +1692,11 @@ function resetPomodoro() {
   savePomodoroState()
 }
 
+function resetPomodoroCompleted() {
+  pomoCompleted.value = 0
+  savePomodoroState()
+}
+
 function skipPomodoro() {
   // 直接进入下一阶段（不计入额外番茄）
   advancePomodoroPhase()
@@ -1708,6 +1749,7 @@ onMounted(async () => {
   clockTimer = setInterval(() => (now.value = new Date()), 250)
   window.addEventListener('bg-dog-click', onDogClick)
   document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('visibilitychange', onVisibilityChange)
   loadTodoPos()
   loadCornerMenuPos('countdown')
   loadCornerMenuPos('music')
@@ -1717,7 +1759,7 @@ onMounted(async () => {
   await loadPresence()
   presenceTimer = setInterval(() => {
     loadPresence()
-  }, 10000)
+  }, 5000)
   loadPomodoroState()
   await loadCountdownFromServer()
   countdownLoaded.value = true
@@ -1736,6 +1778,7 @@ onBeforeUnmount(() => {
   stopTodoDrag()
   window.removeEventListener('bg-dog-click', onDogClick)
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   if (countdownSaveTimer) clearTimeout(countdownSaveTimer)
   if (presenceTimer) clearInterval(presenceTimer)
   presenceTimer = null
@@ -1743,6 +1786,12 @@ onBeforeUnmount(() => {
   todoLiveTimer = null
   stopCornerMenuDrag()
 })
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    loadPresence()
+  }
+}
 
 // 番茄钟：使用现有 now 定时器驱动（无需额外 setInterval）
 let lastPomoDoneKey = ''
@@ -3222,5 +3271,52 @@ watchEffect(() => {
 
 @media (max-width: 980px){
   .history-grid{ grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1024px){
+  .hud-clock-text{ font-size: 56px; letter-spacing: 2px; }
+  .hud-menu{ right: 20px; top: 20px; gap: 8px; }
+  .hud-menu-top{ flex-wrap: wrap; gap: 8px; }
+  .hud-pomo-row{ flex-wrap: wrap; gap: 10px; }
+  .hud-pomo-left{ flex-wrap: wrap; }
+  .hud-pomo-actions{ width: 100%; justify-content: center; }
+  .pomo-icon{ width: 80px; height: 80px; margin: -10px 0; }
+  .simple-btn{ min-height: 48px; min-width: 60px; padding: 0 16px; }
+  .todo-float{ width: min(420px, calc(100% - 24px)); height: 460px; }
+  .history-panel{ width: 100%; max-width: calc(100% - 24px); padding: 18px; }
+  .history-grid{ grid-template-columns: 1fr; }
+  .message-menu{ width: min(420px, calc(100vw - 32px)); }
+  .music-menu{ width: min(280px, calc(100vw - 32px)); }
+  .countdown-menu{ width: min(460px, calc(100vw - 32px)); }
+  .user-avatar{ width: 60px; height: 60px; }
+  .user-avatar-sm{ width: 44px; height: 44px; }
+}
+
+@media (max-width: 768px){
+  .hud-clock-text{ font-size: 40px; letter-spacing: 1px; }
+  .hud-clock{ max-width: calc(100% - 90px); }
+  .hud-pomo-row{ padding: 8px 10px; }
+  .hud-pomo-actions{ gap: 8px; }
+  .simple-btn{ font-size: 13px; min-height: 44px; padding: 0 12px; }
+  .hud-pomo-label{ font-size: 14px; }
+  .hud-pomo-time{ font-size: 20px; }
+  .todo-float{ width: min(360px, calc(100% - 16px)); height: 420px; }
+  .user-name{ font-size: 16px; }
+  .history-title{ font-size: 18px; }
+  .history-day-grid{ grid-template-columns: 1fr; }
+}
+
+@media (pointer: coarse){
+  .simple-btn:hover,
+  .corner-countdown-badge:hover,
+  .corner-music-icon:hover,
+  .corner-message-icon:hover,
+  .corner-message-side:hover,
+  .corner-music-side:hover,
+  .corner-countdown-side:hover,
+  .music-link:hover{ transform: none; }
+  .simple-btn:active{ transform: translateY(1px); background: rgba(255, 255, 255, 0.98); }
+  .simple-check{ width: 32px; height: 32px; }
+  .todo-check{ width: 32px; height: 32px; }
 }
 </style>

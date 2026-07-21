@@ -416,7 +416,7 @@ app.get('/api/study/history', requireAuth, (req, res) => {
   const startDate = dates[0]
 
   return sendHistory({ startDate, endDate, dates, earliestDate }, req, res)
-
+})
 
 function sendHistory(meta, req, res) {
   const { startDate, endDate, dates, earliestDate } = meta
@@ -460,46 +460,6 @@ function sendHistory(meta, req, res) {
 
   return res.json({ startDate, endDate, dates, earliestDate, users })
 }
-  const allUsers = readAllUsers()
-  const userIds = allUsers.map((u) => u.id)
-  if (userIds.length === 0) return res.json({ startDate, endDate, dates, users: [] })
-
-  const placeholders = userIds.map(() => '?').join(',')
-  const rows = db
-    .prepare(
-      `SELECT u.id as userId, u.username as username, s.date as date, s.seconds as seconds
-       FROM users u
-       LEFT JOIN study_daily s
-         ON s.user_id = u.id AND s.date BETWEEN ? AND ?
-       WHERE u.id IN (${placeholders})
-       ORDER BY u.username ASC, s.date ASC`
-    )
-    .all(startDate, endDate, ...userIds)
-
-  const byUser = new Map(allUsers.map((u) => [u.id, { username: u.username, byDate: new Map() }]))
-  for (const r of rows) {
-    if (!r?.date) continue
-    const u = byUser.get(r.userId)
-    if (!u) continue
-    u.byDate.set(r.date, Number(r.seconds || 0))
-  }
-
-  const users = allUsers.map((u) => {
-    const entry = byUser.get(u.id)
-    const history = dates.map((date) => ({
-      date,
-      seconds: entry?.byDate.get(date) ?? 0
-    }))
-    const todaySeconds = entry?.byDate.get(endDate) ?? 0
-    return {
-      username: u.username,
-      todayStudySeconds: todaySeconds,
-      history
-    }
-  })
-
-  return res.json({ startDate, endDate, dates, users })
-})
 
 app.post('/api/todos', requireAuth, (req, res) => {
   const text = String(req.body?.text || '').trim()
