@@ -282,19 +282,19 @@ async function computePaletteFromUrl(url) {
 }
 
 function pickSceneFxTypes(id) {
-  // 11 个场景按画面内容匹配特效；每个场景最多 2 层，避免叠加过多导致卡顿
+  // 11 个场景按画面内容匹配特效；仅在 8/9/10 稍微减少层数，其余保持原样
   switch (clampSceneId(id)) {
     case 1: return ['motes', 'bokeh']          // 春/花瓣：浮尘 + 柔光
     case 2: return ['meteors', 'fireflies']   // 夜空：流星 + 萤火虫
     case 3: return ['butterflies', 'motes']   // 花园：蝴蝶 + 浮尘
     case 4: return ['glints', 'bokeh']        // 海面：闪光 + 柔光
     case 5: return ['dandelion', 'motes']     // 草地：蒲公英 + 浮尘
-    case 6: return ['fireflies', 'sparks']    // 露营篝火：萤火虫 + 火星
-    case 7: return ['fireflies', 'leaves']    // 森林篝火：萤火虫 + 落叶
-    case 8: return ['butterflies', 'bokeh']   // 花田：蝴蝶 + 柔光（花粉）
-    case 9: return ['butterflies', 'birds']    // 地中海小镇：蝴蝶 + 海鸥
-    case 10: return ['bubbles', 'bokeh']      // 水上乐园：气泡 + 柔光
-    case 11: return ['leaves', 'bokeh']        // 秋日农场：落叶 + 柔光
+    case 6: return ['fireflies', 'sparks', 'bokeh'] // 露营篝火：萤火虫 + 火星 + 柔光
+    case 7: return ['fireflies', 'sparks', 'leaves'] // 森林篝火：萤火虫 + 火星 + 落叶
+    case 8: return ['butterflies', 'bokeh']   // 花田：蝴蝶 + 柔光（稍微减少）
+    case 9: return ['butterflies', 'birds']    // 地中海小镇：蝴蝶 + 海鸥（稍微减少）
+    case 10: return ['bubbles', 'bokeh']      // 水上乐园：气泡 + 柔光（稍微减少）
+    case 11: return ['leaves', 'bokeh', 'motes']     // 秋日农场：落叶 + 柔光 + 金尘
     default: return ['motes']
   }
 }
@@ -341,7 +341,7 @@ function initFxState(type, w, h) {
   const seedBase = clampSceneId(sceneId.value) * 1000
 
   if (type === 'motes') {
-    const count = 80
+    const count = 130
     const parts = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 9.7
       return {
@@ -359,7 +359,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bokeh') {
-    const count = 18
+    const count = 28
     const blobs = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.3
       const rr = 70 + fxRand(s + 1) * 170
@@ -415,7 +415,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'dandelion') {
-    const seedCount = 34
+    const seedCount = 48
     const seeds = Array.from({ length: seedCount }, (_, i) => {
       const s = seedBase + i * 19.3
       const scale = 0.8 + fxRand(s + 1) * 1.4
@@ -435,7 +435,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'fireflies') {
-    const count = 38
+    const count = 56
     const flies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 17.9
       return {
@@ -471,7 +471,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'meteors') {
-    const starCount = 75
+    const starCount = 110
     const stars = Array.from({ length: starCount }, (_, i) => {
       const s = seedBase + i * 13.7
       return {
@@ -487,7 +487,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'butterflies') {
-    const count = 22
+    const count = 32
     const butterflies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       const speed = (0.06 + fxRand(s + 1) * 0.12) * Math.min(w, h)
@@ -514,7 +514,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'glints') {
-    const count = 90
+    const count = 140
     const glints = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 21.1
       const r = 14 + fxRand(s + 1) * 62
@@ -537,7 +537,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'sparks') {
-    const count = 36
+    const count = 54
     const sparks = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 27.3
       return {
@@ -557,7 +557,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'leaves') {
-    const count = 32
+    const count = 46
     const leaves = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.7
       return {
@@ -579,7 +579,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'sakura') {
-    const count = 45
+    const count = 66
     const petals = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       return {
@@ -601,7 +601,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bubbles') {
-    const count = 45
+    const count = 65
     const bubbles = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 23.7
       return {
@@ -623,7 +623,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'birds') {
-    const count = 12
+    const count = 18
     const birds = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 41.1
       return {
