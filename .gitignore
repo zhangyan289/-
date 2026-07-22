@@ -13,6 +13,12 @@ client/dist/
 # env
 server/.env
 
+# 临时部署脚本（含敏感信息，用完即删）
+.deploy.py
+
+# 临时部署虚拟环境
+.deploy-venv/
+
 # 本地运行 PID 记录
 .run/
 

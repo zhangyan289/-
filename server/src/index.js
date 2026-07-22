@@ -1576,8 +1576,8 @@ function getAllStickyNotes() {
 }
 
 function startStickyNotesScheduler() {
-  // 固定刷新时间：00:00, 08:00, 16:00
-  const REFRESH_HOURS = [0, 8, 16]
+  // 固定刷新时间：00:00, 12:00（每 12 小时一次，减少 API 调用）
+  const REFRESH_HOURS = [0, 12]
   let lastRefreshedDate = ''
   let lastRefreshedHour = -1
 

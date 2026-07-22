@@ -164,7 +164,7 @@ function quizBubbleText(pet) {
 
 function onQuizBubbleClick(pet) {
   if (isQuizCooldown(pet)) {
-    petQuote.value[pet.key] = pickQuote()
+    // 冷却中只显示固定的鼓励文案，不切换
     return
   }
   openQuizForPet(pet.key)
@@ -430,6 +430,8 @@ async function answerQuiz(petKey, selectedOption) {
     }
     quizStatus.value = 'result'
     quizAvailability.value[petKey] = 'cooldown'
+    // 答完题后随机生成一句鼓励文案，冷却期间保持不变
+    petQuote.value[petKey] = pickQuote()
     const pet = pets.value.find((p) => p.key === petKey)
     if (pet && typeof data?.happiness === 'number') {
       pet.happiness = clamp100(data.happiness)
