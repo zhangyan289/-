@@ -579,7 +579,7 @@ function getTodayFeedLog() {
   return dailyFeedLog.get(today) || []
 }
 
-const QUIZ_COOLDOWN_MINUTES = 60
+const QUIZ_COOLDOWN_MINUTES = 120
 const QUIZ_REWARD_HAPPINESS = 10
 const QUIZ_PENALTY_HAPPINESS = -10
 const quizCache = new Map()
@@ -1424,13 +1424,13 @@ const STICKY_NOTE_SLOTS = {
   ],
   小白: [
     { type: 'english', label: '英语', subject: '考研英语' },
-    { type: 'control', label: '自动控制', subject: '自动控制原理' },
-    { type: 'modern_control', label: '现代控制', subject: '现代控制理论' }
+    { type: 'math', label: '数学', subject: '考研数学' },
+    { type: 'specialty', label: '专业课', subject: '专业课（自动控制原理 / 现代控制理论）' }
   ],
   userB: [
     { type: 'english', label: '英语', subject: '考研英语' },
-    { type: 'control', label: '自动控制', subject: '自动控制原理' },
-    { type: 'modern_control', label: '现代控制', subject: '现代控制理论' }
+    { type: 'math', label: '数学', subject: '考研数学' },
+    { type: 'specialty', label: '专业课', subject: '专业课（自动控制原理 / 现代控制理论）' }
   ]
 }
 
@@ -1441,6 +1441,11 @@ const CS408_SUBJECTS = [
   '计算机网络'
 ]
 
+const WHITE_SPECIALTY_SUBJECTS = [
+  '自动控制原理',
+  '现代控制理论'
+]
+
 function buildStickyNotePrompt({ username, slotIndex }) {
   const meta = STICKY_NOTE_SLOTS[username]?.[slotIndex]
   if (!meta) return null
@@ -1449,6 +1454,9 @@ function buildStickyNotePrompt({ username, slotIndex }) {
   if (meta.type === 'cs408') {
     const subject = CS408_SUBJECTS[Math.floor(Math.random() * CS408_SUBJECTS.length)]
     detail = `，从 408 四门专业课中随机抽取一门：${subject}`
+  } else if (meta.type === 'specialty') {
+    const subject = WHITE_SPECIALTY_SUBJECTS[Math.floor(Math.random() * WHITE_SPECIALTY_SUBJECTS.length)]
+    detail = `，从小白的专业课中随机抽取一门：${subject}`
   }
 
   const baseInstruction = `你是考研学习助手。请为"${username}"的"${meta.label}"便利贴生成一个适合考研复习的具体记忆点。
@@ -1483,35 +1491,41 @@ async function generateStickyNote({ username, slotIndex }) {
   const prompt = buildStickyNotePrompt({ username, slotIndex })
   if (!prompt) return { title: '未知科目', content: '请检查用户名配置。' }
 
-  try {
-    const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${KIMI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'moonshot-v1-8k',
-        messages: [
-          { role: 'system', content: '你是一个严格按 JSON 格式返回的考研学习助手。' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7
+  let lastError = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${KIMI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'moonshot-v1-8k',
+          messages: [
+            { role: 'system', content: '你是一个严格按 JSON 格式返回的考研学习助手。' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7
+        })
       })
-    })
-    if (!response.ok) {
-      const err = await response.text().catch(() => '未知错误')
-      throw new Error(`Kimi API 错误: ${err}`)
+      if (!response.ok) {
+        const err = await response.text().catch(() => '未知错误')
+        throw new Error(`Kimi API 错误: ${err}`)
+      }
+      const data = await response.json()
+      const raw = data?.choices?.[0]?.message?.content || ''
+      const parsed = parseStickyNoteJson(raw)
+      if (!parsed) throw new Error('格式解析失败')
+      return { title: String(parsed.title || ''), content: String(parsed.content || '') }
+    } catch (e) {
+      lastError = e
+      console.error(`[sticky-note] generate attempt ${attempt + 1} failed:`, e?.message || String(e))
     }
-    const data = await response.json()
-    const raw = data?.choices?.[0]?.message?.content || ''
-    const parsed = parseStickyNoteJson(raw)
-    if (!parsed) throw new Error('格式解析失败')
-    return { title: String(parsed.title || ''), content: String(parsed.content || '') }
-  } catch (e) {
-    console.error('[sticky-note] generate failed:', e?.message || String(e))
-    return { title: '生成失败', content: '大模型服务暂不可用，稍后会自动重试。' }
   }
+
+  console.error('[sticky-note] generate failed after retries:', lastError?.message || String(lastError))
+  return { title: '生成失败', content: '大模型服务暂不可用，稍后会自动重试。' }
 }
 
 function parseStickyNoteJson(text) {

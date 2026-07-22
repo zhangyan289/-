@@ -3655,10 +3655,13 @@ watchEffect(() => {
 
 .todo-text{
   font-weight: 900;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
   color: rgba(20, 10, 18, 0.92);
+  line-height: 1.5;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .todo-empty{
