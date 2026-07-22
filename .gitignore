@@ -12,3 +12,10 @@ client/dist/
 
 # env
 server/.env
+
+# 本地运行 PID 记录
+.run/
+
+# 原始桌宠素材（已处理到 client/public/assets/user/pets/）
+小白桌宠素材/
+小鸡毛桌宠素材/

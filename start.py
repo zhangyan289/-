@@ -4,9 +4,11 @@
 import os
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import threading
+from typing import List
 
 
 PID_DIR = ".run"
@@ -40,7 +42,7 @@ def _kill_pid(pid: int):
         pass
 
 
-def _load_previous_pids(repo_root: str) -> list[int]:
+def _load_previous_pids(repo_root: str) -> List[int]:
     path = os.path.join(repo_root, PID_FILE)
     if not os.path.exists(path):
         return []
@@ -50,7 +52,7 @@ def _load_previous_pids(repo_root: str) -> list[int]:
         pids = obj.get("pids") if isinstance(obj, dict) else None
         if not isinstance(pids, list):
             return []
-        out: list[int] = []
+        out: List[int] = []
         for x in pids:
             try:
                 out.append(int(x))
@@ -61,7 +63,7 @@ def _load_previous_pids(repo_root: str) -> list[int]:
         return []
 
 
-def _write_pids(repo_root: str, pids: list[int]):
+def _write_pids(repo_root: str, pids: List[int]):
     try:
         os.makedirs(os.path.join(repo_root, PID_DIR), exist_ok=True)
         with open(os.path.join(repo_root, PID_FILE), "w", encoding="utf-8") as f:
@@ -82,8 +84,13 @@ def _stream(pipe, prefix: str):
         for line in iter(pipe.readline, ""):
             if not line:
                 break
-            sys.stdout.write(f"[{prefix}] {line}")
-            sys.stdout.flush()
+            try:
+                sys.stdout.write(f"[{prefix}] {line}")
+                sys.stdout.flush()
+            except UnicodeEncodeError:
+                sys.stdout.buffer.write(f"[{prefix}] ".encode('utf-8', errors='replace'))
+                sys.stdout.buffer.write(line.encode('utf-8', errors='replace'))
+                sys.stdout.buffer.flush()
     finally:
         try:
             pipe.close()
@@ -91,12 +98,11 @@ def _stream(pipe, prefix: str):
             pass
 
 
-def _spawn(cmd: str, cwd: str, prefix: str) -> subprocess.Popen:
-    # shell=True is the most reliable on Windows for npm.cmd resolution.
+def _spawn(args: List[str], cwd: str, prefix: str) -> subprocess.Popen:
     proc = subprocess.Popen(
-        cmd,
+        args,
         cwd=cwd,
-        shell=True,
+        shell=False,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -116,8 +122,8 @@ def main() -> int:
     repo_root = os.path.dirname(os.path.abspath(__file__))
     os.chdir(repo_root)
 
-    if shutil.which("npm") is None:
-        print("[start] 找不到 npm：请先安装 Node.js，并确保 npm 在 PATH 中。")
+    if shutil.which("node") is None:
+        print("[start] 找不到 node：请先安装 Node.js，并确保 node 在 PATH 中。")
         return 1
 
     print(f"[start] Repo: {repo_root}")
@@ -134,8 +140,9 @@ def main() -> int:
     procs = []
 
     # Start server and client concurrently
-    procs.append(_spawn("npm run dev", cwd=repo_root, prefix="server"))
-    procs.append(_spawn("npm run dev:client", cwd=repo_root, prefix="client"))
+    procs.append(_spawn(["node", "src/index.js"], cwd=os.path.join(repo_root, "server"), prefix="server"))
+    vite_bin = os.path.join(repo_root, "node_modules", "vite", "bin", "vite.js")
+    procs.append(_spawn(["node", vite_bin], cwd=os.path.join(repo_root, "client"), prefix="client"))
     _write_pids(repo_root, [p.pid for p in procs if p and p.pid])
 
     def terminate_all():
@@ -149,15 +156,34 @@ def main() -> int:
             except Exception:
                 pass
 
+    def is_port_open(port, host='127.0.0.1'):
+        try:
+            with socket.create_connection((host, port), timeout=1.5):
+                return True
+        except Exception:
+            return False
+
     try:
-        # Wait until any process exits; keep the script alive.
+        # 给前后端 12 秒启动窗口
+        threading.Event().wait(1)
+        missing_streak = 0
         while True:
-            exit_codes = [p.poll() for p in procs]
-            if any(code is not None for code in exit_codes):
-                print("\n[start] 某个进程已退出，正在关闭其它进程...")
-                terminate_all()
-                return next((code for code in exit_codes if code is not None), 0) or 0
-            threading.Event().wait(0.2)
+            server_ok = is_port_open(3000)
+            client_ok = is_port_open(5173)
+            if server_ok and client_ok:
+                missing_streak = 0
+            else:
+                missing_streak += 1
+                if missing_streak >= 3:
+                    down = []
+                    if not server_ok:
+                        down.append('3000')
+                    if not client_ok:
+                        down.append('5173')
+                    print(f"\n[start] 端口 {', '.join(down)} 未监听，正在关闭其它进程...")
+                    terminate_all()
+                    return 1
+            threading.Event().wait(2)
     except KeyboardInterrupt:
         print("\n[start] Ctrl+C 收到，正在停止...")
         terminate_all()

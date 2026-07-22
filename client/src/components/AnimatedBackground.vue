@@ -1,6 +1,6 @@
 <template>
   <div class="bg-root" aria-hidden="true">
-    <div class="bg-stage">
+    <div class="bg-stage bg-sway">
     <video
       v-if="kind === 'video'"
       class="bg-media"
@@ -160,7 +160,7 @@ const src = ref('/assets/placeholders/bg_white.svg')
 const showDebug = ref(false)
 
 const sceneId = ref(1)
-const SCENE_COUNT = 5
+const SCENE_COUNT = 11
 const SCENE_STORAGE_KEY = 'bg_scene_id'
 
 const petalsOverlaySrc = ref('')
@@ -216,7 +216,7 @@ const hoveredDog = ref('')
 const clickedDog = ref('')
 const clickFx = ref({ show: false, x: 0, y: 0, key: 0 })
 
-const petalCount = 28
+const petalCount = 40
 
 function clamp01(x) {
   return Math.max(0, Math.min(1, x))
@@ -282,13 +282,19 @@ async function computePaletteFromUrl(url) {
 }
 
 function pickSceneFxTypes(id) {
-  // 5 个场景各不同；bg2 需要“流星 + 萤火虫”组合
+  // 11 个场景按画面内容匹配特效；数量上尽量叠加 2~4 层，提升沉浸感
   switch (clampSceneId(id)) {
-    case 1: return ['motes']
-    case 2: return ['meteors', 'fireflies']
-    case 3: return ['butterflies']
-    case 4: return ['glints']
-    case 5: return ['dandelion']
+    case 1: return ['motes', 'bokeh']          // 春/花瓣：浮尘 + 柔光
+    case 2: return ['meteors', 'fireflies']   // 夜空：流星 + 萤火虫
+    case 3: return ['butterflies', 'motes']   // 花园：蝴蝶 + 浮尘
+    case 4: return ['glints', 'bokeh']        // 海面：闪光 + 柔光
+    case 5: return ['dandelion', 'motes']     // 草地：蒲公英 + 浮尘
+    case 6: return ['fireflies', 'sparks', 'bokeh'] // 露营篝火：萤火虫 + 火星 + 柔光
+    case 7: return ['fireflies', 'sparks', 'leaves'] // 森林篝火：萤火虫 + 火星 + 落叶
+    case 8: return ['butterflies', 'bokeh', 'motes'] // 花田：蝴蝶 + 柔光 + 浮尘（花粉）
+    case 9: return ['butterflies', 'birds', 'bokeh'] // 地中海小镇：蝴蝶 + 海鸥 + 柔光
+    case 10: return ['bubbles', 'bokeh', 'motes']    // 水上乐园：气泡 + 柔光 + 水雾
+    case 11: return ['leaves', 'bokeh', 'motes']     // 秋日农场：落叶 + 柔光 + 金尘
     default: return ['motes']
   }
 }
@@ -327,24 +333,24 @@ function initFxState(type, w, h) {
   const palette = sceneFxPalette.value
   const base = { r: palette.r, g: palette.g, b: palette.b }
 
-  // 亮背景：特效颜色更偏深；暗背景：更偏亮
+  // 亮背景：特效颜色更偏深；暗背景：更偏亮。提升对比度，让特效更"明显"
   const tint = palette.l > 0.62
-    ? mixColor(base, { r: 20, g: 30, b: 40 }, 0.55)
-    : mixColor(base, { r: 255, g: 255, b: 255 }, 0.65)
+    ? mixColor(base, { r: 15, g: 25, b: 35 }, 0.72)
+    : mixColor(base, { r: 255, g: 255, b: 255 }, 0.78)
 
   const seedBase = clampSceneId(sceneId.value) * 1000
 
   if (type === 'motes') {
-    const count = 72
+    const count = 130
     const parts = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 9.7
       return {
         x: fxRand(s + 1) * w,
         y: fxRand(s + 2) * h,
-        r: 0.8 + fxRand(s + 3) * 2.2,
+        r: 1.0 + fxRand(s + 3) * 3.0,
         vx: (-0.012 + fxRand(s + 4) * 0.024) * w,
         vy: (-0.018 + fxRand(s + 5) * 0.010) * h,
-        a: 0.05 + fxRand(s + 6) * 0.10,
+        a: 0.10 + fxRand(s + 6) * 0.16,
         p: fxRand(s + 7) * Math.PI * 2,
         s: 0.6 + fxRand(s + 8) * 1.8
       }
@@ -353,7 +359,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bokeh') {
-    const count = 14
+    const count = 28
     const blobs = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.3
       const rr = 70 + fxRand(s + 1) * 170
@@ -363,7 +369,7 @@ function initFxState(type, w, h) {
         r: rr,
         vx: (-0.010 + fxRand(s + 4) * 0.020) * w,
         vy: (-0.006 + fxRand(s + 5) * 0.012) * h,
-        a: 0.04 + fxRand(s + 6) * 0.08
+        a: 0.08 + fxRand(s + 6) * 0.14
       }
     })
     return { type, tint, blobs }
@@ -409,7 +415,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'dandelion') {
-    const seedCount = 34
+    const seedCount = 48
     const seeds = Array.from({ length: seedCount }, (_, i) => {
       const s = seedBase + i * 19.3
       const scale = 0.8 + fxRand(s + 1) * 1.4
@@ -419,7 +425,7 @@ function initFxState(type, w, h) {
         vx: (-0.020 + fxRand(s + 4) * 0.040) * w,
         vy: (-0.020 + fxRand(s + 5) * 0.030) * h,
         r: 5.5 * scale,
-        a: 0.34 + fxRand(s + 6) * 0.30,
+        a: 0.50 + fxRand(s + 6) * 0.30,
         phase: fxRand(s + 7) * Math.PI * 2,
         spin: (-0.9 + fxRand(s + 8) * 1.8)
       }
@@ -429,7 +435,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'fireflies') {
-    const count = 42
+    const count = 56
     const flies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 17.9
       return {
@@ -481,7 +487,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'butterflies') {
-    const count = 18
+    const count = 32
     const butterflies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       const speed = (0.06 + fxRand(s + 1) * 0.12) * Math.min(w, h)
@@ -494,7 +500,7 @@ function initFxState(type, w, h) {
         vx,
         vy,
         s: 0.75 + fxRand(s + 5) * 1.45,
-        a: 0.32 + fxRand(s + 6) * 0.30,
+        a: 0.42 + fxRand(s + 6) * 0.30,
         p: fxRand(s + 7) * Math.PI * 2,
         flap: 4.6 + fxRand(s + 8) * 4.2,
         drift: 0.7 + fxRand(s + 9) * 1.5,
@@ -508,7 +514,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'glints') {
-    const count = 112
+    const count = 140
     const glints = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 21.1
       const r = 14 + fxRand(s + 1) * 62
@@ -528,6 +534,109 @@ function initFxState(type, w, h) {
     // 海面闪光偏暖白金
     const sun = mixColor(tint, { r: 255, g: 250, b: 222 }, 0.92)
     return { type, tint: sun, glints }
+  }
+
+  if (type === 'sparks') {
+    const count = 54
+    const sparks = Array.from({ length: count }, (_, i) => {
+      const s = seedBase + i * 27.3
+      return {
+        x: fxRand(s + 1) * w,
+        y: (0.55 + fxRand(s + 2) * 0.45) * h,
+        vx: (-0.004 + fxRand(s + 3) * 0.008) * w,
+        vy: (-0.020 - fxRand(s + 4) * 0.035) * h,
+        r: 1.2 + fxRand(s + 5) * 2.8,
+        a: 0.55 + fxRand(s + 6) * 0.40,
+        life: 0.55 + fxRand(s + 7) * 0.75,
+        maxLife: 0.55 + fxRand(s + 7) * 0.75,
+        flicker: 4 + fxRand(s + 8) * 6
+      }
+    })
+    const warm = mixColor(tint, { r: 255, g: 160, b: 70 }, 0.85)
+    return { type, tint: warm, sparks }
+  }
+
+  if (type === 'leaves') {
+    const count = 46
+    const leaves = Array.from({ length: count }, (_, i) => {
+      const s = seedBase + i * 31.7
+      return {
+        x: fxRand(s + 1) * w,
+        y: (-0.05 - fxRand(s + 2) * 0.25) * h,
+        vx: (-0.006 + fxRand(s + 3) * 0.012) * w,
+        vy: (0.020 + fxRand(s + 4) * 0.020) * h,
+        r: 8 + fxRand(s + 5) * 13,
+        a: 0.70 + fxRand(s + 6) * 0.28,
+        rot: fxRand(s + 7) * Math.PI * 2,
+        rotSpeed: (-0.7 + fxRand(s + 8) * 1.4),
+        drift: (0.004 + fxRand(s + 9) * 0.010) * w,
+        color: fxRand(s + 10) > 0.5
+          ? mixColor(tint, { r: 220, g: 135, b: 35 }, 0.82)
+          : mixColor(tint, { r: 180, g: 85, b: 30 }, 0.82)
+      }
+    })
+    return { type, tint: leaves[0].color, leaves }
+  }
+
+  if (type === 'sakura') {
+    const count = 66
+    const petals = Array.from({ length: count }, (_, i) => {
+      const s = seedBase + i * 29.7
+      return {
+        x: fxRand(s + 1) * w,
+        y: (-0.05 - fxRand(s + 2) * 0.25) * h,
+        vx: (-0.005 + fxRand(s + 3) * 0.010) * w,
+        vy: (0.018 + fxRand(s + 4) * 0.015) * h,
+        r: 7 + fxRand(s + 5) * 11,
+        a: 0.65 + fxRand(s + 6) * 0.25,
+        rot: fxRand(s + 7) * Math.PI * 2,
+        rotSpeed: (-0.5 + fxRand(s + 8) * 1.0),
+        drift: (0.005 + fxRand(s + 9) * 0.012) * w,
+        color: fxRand(s + 10) > 0.5
+          ? mixColor(tint, { r: 255, g: 195, b: 215 }, 0.88)
+          : mixColor(tint, { r: 255, g: 170, b: 195 }, 0.88)
+      }
+    })
+    return { type, tint: petals[0].color, petals }
+  }
+
+  if (type === 'bubbles') {
+    const count = 65
+    const bubbles = Array.from({ length: count }, (_, i) => {
+      const s = seedBase + i * 23.7
+      return {
+        x: fxRand(s + 1) * w,
+        y: (1.05 + fxRand(s + 2) * 0.35) * h,
+        r: 5 + fxRand(s + 3) * 15,
+        vx: (-0.002 + fxRand(s + 4) * 0.004) * w,
+        vy: (-0.020 - fxRand(s + 5) * 0.030) * h,
+        wobble: fxRand(s + 6) * Math.PI * 2,
+        wobbleSpeed: 1.2 + fxRand(s + 7) * 2.2,
+        a: 0.35 + fxRand(s + 8) * 0.30
+      }
+    })
+    // 水泡：亮背景用深青蓝提高对比，暗背景用亮青蓝
+    const water = palette.l > 0.58
+      ? mixColor(tint, { r: 0, g: 105, b: 150 }, 0.85)
+      : mixColor(tint, { r: 190, g: 245, b: 255 }, 0.75)
+    return { type, tint: water, bubbles }
+  }
+
+  if (type === 'birds') {
+    const count = 18
+    const birds = Array.from({ length: count }, (_, i) => {
+      const s = seedBase + i * 41.1
+      return {
+        x: (-0.05 - fxRand(s + 1) * 0.25) * w,
+        y: (0.08 + fxRand(s + 2) * 0.35) * h,
+        vx: (0.06 + fxRand(s + 3) * 0.10) * w,
+        size: 4.0 + fxRand(s + 4) * 6.5,
+        a: 0.55 + fxRand(s + 5) * 0.30,
+        flapSpeed: 3.5 + fxRand(s + 6) * 4.5,
+        phase: fxRand(s + 7) * Math.PI * 2
+      }
+    })
+    return { type, tint: { r: 75, g: 78, b: 88 }, birds }
   }
 
   return { type: 'motes', tint, parts: [] }
@@ -622,8 +731,8 @@ function renderFxFrame({ ctx, w, h }, ts) {
 
         p.p += dt * p.s
         const tw = 0.65 + 0.35 * Math.sin(p.p)
-        drawSoftDot(ctx, p.x, p.y, p.r * 5.2, tint, p.a * 0.55 * tw)
-        drawSoftDot(ctx, p.x, p.y, p.r * 1.2, tint, p.a * tw)
+        drawSoftDot(ctx, p.x, p.y, p.r * 6.5, tint, p.a * 0.65 * tw)
+        drawSoftDot(ctx, p.x, p.y, p.r * 1.5, tint, p.a * 1.05 * tw)
       }
       continue
     }
@@ -930,6 +1039,156 @@ function renderFxFrame({ ctx, w, h }, ts) {
 
       // 最后再擦一次，防止线段/柔光覆盖到船
       eraseBoat()
+      continue
+    }
+
+    if (type === 'sparks') {
+      const tint = sub.tint
+      for (const p of sub.sparks) {
+        p.life -= dt
+        if (p.life <= 0) {
+          p.x = Math.random() * w
+          p.y = (0.55 + Math.random() * 0.45) * h
+          p.life = p.maxLife
+          p.a = 0.55 + Math.random() * 0.40
+        }
+        p.x += p.vx * dt
+        p.y += p.vy * dt
+        const k = clamp01(p.life / p.maxLife)
+        const flicker = 0.5 + 0.5 * Math.sin(ts / 1000 * p.flicker)
+        drawSoftDot(ctx, p.x, p.y, p.r * 10, tint, p.a * k * flicker * 0.8)
+        drawSoftDot(ctx, p.x, p.y, p.r * 2.5, { r: 255, g: 245, b: 210 }, p.a * k * flicker)
+      }
+      continue
+    }
+
+    if (type === 'leaves') {
+      for (const leaf of sub.leaves) {
+        leaf.x += leaf.vx * dt + Math.sin(ts / 1000 + leaf.rot) * leaf.drift * dt
+        leaf.y += leaf.vy * dt
+        leaf.rot += leaf.rotSpeed * dt
+
+        if (leaf.y > h + 40) {
+          leaf.y = -40
+          leaf.x = Math.random() * w
+        }
+        if (leaf.x < -40) leaf.x = w + 40
+        if (leaf.x > w + 40) leaf.x = -40
+
+        const size = leaf.r
+        ctx.save()
+        ctx.translate(leaf.x, leaf.y)
+        ctx.rotate(leaf.rot)
+        ctx.fillStyle = rgba(leaf.color, leaf.a)
+        ctx.beginPath()
+        ctx.ellipse(0, 0, size * 0.6, size * 0.3, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = rgba(leaf.color, leaf.a * 0.8)
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(-size * 0.5, 0)
+        ctx.lineTo(size * 0.5, 0)
+        ctx.stroke()
+        ctx.restore()
+      }
+      continue
+    }
+
+    if (type === 'sakura') {
+      for (const p of sub.petals) {
+        p.x += p.vx * dt + Math.sin(ts / 1000 + p.rot) * p.drift * dt
+        p.y += p.vy * dt
+        p.rot += p.rotSpeed * dt
+
+        if (p.y > h + 40) {
+          p.y = -40
+          p.x = Math.random() * w
+        }
+        if (p.x < -40) p.x = w + 40
+        if (p.x > w + 40) p.x = -40
+
+        const size = p.r
+        ctx.save()
+        ctx.translate(p.x, p.y)
+        ctx.rotate(p.rot)
+        ctx.fillStyle = rgba(p.color, p.a)
+        ctx.beginPath()
+        // 樱花花瓣：心形轮廓
+        ctx.moveTo(0, size * 0.4)
+        ctx.bezierCurveTo(-size * 0.6, -size * 0.2, -size * 0.6, -size * 0.6, 0, -size * 0.8)
+        ctx.bezierCurveTo(size * 0.6, -size * 0.6, size * 0.6, -size * 0.2, 0, size * 0.4)
+        ctx.fill()
+        ctx.restore()
+      }
+      continue
+    }
+
+    if (type === 'bubbles') {
+      const tint = sub.tint
+      for (const b of sub.bubbles) {
+        b.y += b.vy * dt
+        b.x += b.vx * dt + Math.sin(ts / 1000 * b.wobbleSpeed + b.wobble) * (0.003 * w) * dt
+        b.wobble += dt * b.wobbleSpeed
+
+        if (b.y < -b.r * 2) {
+          b.y = (1.05 + Math.random() * 0.20) * h
+          b.x = Math.random() * w
+          b.r = 5 + Math.random() * 15
+          b.a = 0.35 + Math.random() * 0.30
+        }
+
+        const wobbleX = Math.sin(b.wobble) * b.r * 0.4
+        const x = b.x + wobbleX
+
+        // 气泡外发光（更明显）
+        drawSoftDot(ctx, x, b.y, b.r * 4.2, tint, b.a * 0.55)
+        // 气泡边缘
+        ctx.strokeStyle = rgba(tint, b.a * 1.0)
+        ctx.lineWidth = 1.6
+        ctx.beginPath()
+        ctx.arc(x, b.y, b.r, 0, Math.PI * 2)
+        ctx.stroke()
+        // 高光（更亮更大）
+        drawSoftDot(ctx, x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.75, { r: 255, g: 255, b: 255 }, b.a * 1.05)
+      }
+      continue
+    }
+
+    if (type === 'birds') {
+      const tint = sub.tint
+      for (const b of sub.birds) {
+        b.x += b.vx * dt
+        const flap = Math.sin(ts / 1000 * b.flapSpeed + b.phase)
+        const yWobble = Math.sin(ts / 1000 * 0.7 + b.phase) * (0.008 * h)
+
+        if (b.x > w + b.size * 20) {
+          b.x = -b.size * 20
+          b.y = (0.08 + Math.random() * 0.35) * h
+          b.vx = (0.06 + Math.random() * 0.10) * w
+          b.size = 4.0 + Math.random() * 6.5
+        }
+
+        const x = b.x
+        const y = b.y + yWobble
+        const size = b.size * 3.5
+
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.strokeStyle = rgba(tint, b.a)
+        ctx.lineWidth = Math.max(2.0, size * 0.22)
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+
+        // 展翅的飞鸟剪影
+        const wingY = Math.abs(flap) * size * 0.40
+        ctx.beginPath()
+        ctx.moveTo(-size * 0.6, -wingY)
+        ctx.quadraticCurveTo(-size * 0.2, wingY * 0.2, 0, 0)
+        ctx.quadraticCurveTo(size * 0.2, wingY * 0.2, size * 0.6, -wingY)
+        ctx.stroke()
+
+        ctx.restore()
+      }
       continue
     }
   }
@@ -1591,7 +1850,8 @@ watch(
   100%{ transform: scale(1.03); }
 }
 
-.bg-stage{
+.bg-stage,
+.bg-sway{
   animation: bgStageBreath 9s ease-in-out infinite;
 }
 
@@ -1692,15 +1952,21 @@ watch(
 }
 
 .bg-fx-canvas.fx-meteors{ opacity: 0.96; mix-blend-mode: screen; }
-.bg-fx-canvas.fx-motes{ opacity: 0.72; mix-blend-mode: screen; }
+.bg-fx-canvas.fx-motes{ opacity: 0.70; mix-blend-mode: normal; }
+.bg-fx-canvas.fx-bokeh{ opacity: 0.75; mix-blend-mode: normal; }
 .bg-fx-canvas.fx-wheat{ opacity: 0.86; mix-blend-mode: overlay; }
 .bg-fx-canvas.fx-waves{ opacity: 0.94; mix-blend-mode: overlay; }
 .bg-fx-canvas.fx-dandelion{ opacity: 1; mix-blend-mode: screen; }
-.bg-fx-canvas.fx-fireflies{ opacity: 0.96; mix-blend-mode: screen; }
-.bg-fx-canvas.fx-butterflies{ opacity: 0.98; mix-blend-mode: screen; }
+.bg-fx-canvas.fx-fireflies{ opacity: 1; mix-blend-mode: screen; }
+.bg-fx-canvas.fx-butterflies{ opacity: 1; mix-blend-mode: screen; }
 .bg-fx-canvas.fx-glints{ opacity: 1; mix-blend-mode: screen; }
 .bg-fx-canvas.fx-combo{ opacity: 1; }
 .bg-fx-canvas.fx-rays{ opacity: 0.62; mix-blend-mode: overlay; }
+.bg-fx-canvas.fx-sparks{ opacity: 1; mix-blend-mode: screen; }
+.bg-fx-canvas.fx-leaves{ opacity: 0.95; mix-blend-mode: normal; }
+.bg-fx-canvas.fx-sakura{ opacity: 0.95; mix-blend-mode: screen; }
+.bg-fx-canvas.fx-bubbles{ opacity: 1; mix-blend-mode: normal; }
+.bg-fx-canvas.fx-birds{ opacity: 1; mix-blend-mode: normal; }
 
 .bg-scene-fx.fx-rays{ opacity: 0.42; mix-blend-mode: overlay; }
 
@@ -1817,7 +2083,8 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce){
-  .bg-stage{ animation: none; }
+  .bg-stage,
+  .bg-sway{ animation: none; }
   .bg-overlay{ animation: none; }
   .petal{ animation: none; }
   .ripples-layer{ animation: none; }

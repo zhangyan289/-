@@ -179,6 +179,7 @@
             </svg>
           </button>
         </div>
+        <span v-if="hasUnreadMessages" class="message-unread-dot" />
       </div>
 
       <div
@@ -288,7 +289,7 @@
 
     <div class="hud-menu">
       <div class="hud-menu-top">
-        <button class="simple-btn" @click="cycleScene" :title="`切换场景（当前：${bgSceneId}/5）`">场景：{{ bgSceneId }}/5</button>
+        <button class="simple-btn" @click="cycleScene" :title="`切换场景（当前：${bgSceneId}/11）`">场景：{{ bgSceneId }}/11</button>
         <button class="simple-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '进入全屏'">{{ isFullscreen ? '退出全屏' : '全屏' }}</button>
         <button class="simple-btn hud-logout" @click="logout">退出账号</button>
       </div>
@@ -331,7 +332,7 @@
               @dragstart.prevent
               @error="markAvatarError(todoUser.username)"
             />
-            <div>Todo - {{ displayName(todoUser?.username) }}</div>
+            <div class="todo-title-text">Todo · {{ displayName(todoUser?.username) }}</div>
           </div>
 
           <div class="todo-header-right">
@@ -339,6 +340,16 @@
               <img :src="dragHandleIcon" alt="drag" class="todo-drag-icon" draggable="false" @dragstart.prevent />
             </div>
             <button class="simple-btn" @click="closeTodo">关闭</button>
+          </div>
+        </div>
+
+        <div class="todo-responsibility-card" :class="todoRunawayMarks > 0 ? 'has-marks' : 'clean'">
+          <div class="todo-responsibility-main">
+            <span class="todo-responsibility-emoji">{{ todoRunawayMarks > 0 ? '💔' : '💖' }}</span>
+            <div class="todo-responsibility-body">
+              <div class="todo-responsibility-count">您不负责任的次数为 {{ todoRunawayMarks }} 次</div>
+              <div class="todo-responsibility-thanks">谢谢你为了小狗而自律</div>
+            </div>
           </div>
         </div>
 
@@ -366,14 +377,21 @@
             class="todo-item"
             :style="{ backgroundImage: `url(${listItemImg})` }"
           >
+            <img
+              class="todo-item-icon"
+              src="/assets/placeholders/todo_item_icon.svg"
+              alt="todo"
+              draggable="false"
+              @dragstart.prevent
+            />
             <div class="todo-left">
               <button
-                class="simple-check"
-                :class="{ checked: t.done, disabled: !todoEditable }"
+                v-if="todoEditable && !t.done"
+                class="simple-btn todo-exchange-btn"
                 type="button"
-                aria-label="toggle"
-                @click="todoEditable ? toggleTodo(t) : null"
-              />
+                @click="askExchangeTodo(t)"
+              >换积分</button>
+              <div v-else-if="t.done" class="todo-done-badge">✓ 已完成</div>
               <div
                 class="todo-text"
                 :style="{
@@ -398,62 +416,191 @@
       </div>
     </div>
 
-    <!-- 学习记录弹窗（朴素风格面板） -->
+    <!-- 学习记录弹窗（日历热力图 + 统计摘要） -->
     <div v-if="showHistory" class="overlay overlay-history" @click.self="showHistory = false">
-      <div
-        class="history-panel history-panel-simple"
-      >
+      <div class="history-panel history-panel-simple">
         <div class="history-header">
-          <div class="history-title">学习记录（每日）</div>
+          <div class="history-title">学习记录</div>
           <button class="simple-btn" @click="showHistory = false">关闭</button>
         </div>
 
         <div class="history-range">
-          <div class="history-range-actions">
-            <button v-if="canLoadMore" class="simple-btn" @click="loadMoreHistory">加载更多</button>
-            <div v-else class="history-range-end">已到最早记录</div>
+          <div class="history-range-presets">
+            <button
+              class="simple-btn"
+              :class="{ 'simple-btn-active': historyDays === 7 }"
+              @click="setHistoryRange(7)"
+            >近 7 天</button>
+            <button
+              class="simple-btn"
+              :class="{ 'simple-btn-active': historyDays === 14 }"
+              @click="setHistoryRange(14)"
+            >近 14 天</button>
+            <button
+              class="simple-btn"
+              :class="{ 'simple-btn-active': historyDays === 30 }"
+              @click="setHistoryRange(30)"
+            >近 30 天</button>
+          </div>
+          <div class="history-range-text">{{ historyRangeText }}</div>
+        </div>
+
+        <div class="history-stats">
+          <div class="history-stat-card">
+            <div class="history-stat-label">总学习时长</div>
+            <div class="history-stat-value">{{ formatSeconds(historyStats.totalSeconds) }}</div>
+          </div>
+          <div class="history-stat-card">
+            <div class="history-stat-label">日均学习</div>
+            <div class="history-stat-value">{{ formatSeconds(historyStats.avgSeconds) }}</div>
+          </div>
+          <div class="history-stat-card">
+            <div class="history-stat-label">连续学习</div>
+            <div class="history-stat-value">{{ historyStats.streakDays }} 天</div>
+          </div>
+          <div class="history-stat-card">
+            <div class="history-stat-label">单日最长</div>
+            <div class="history-stat-value">{{ formatSeconds(historyStats.maxSeconds) }}</div>
           </div>
         </div>
 
-        <div class="history-grid">
-          <div v-for="u in users" :key="u.username" class="history-user-card">
-            <div class="history-user-head">
-              <div class="history-user-left">
+        <div class="history-heatmap">
+          <div class="history-heatmap-scroll">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th class="history-sticky-col">用户</th>
+                  <th v-for="d in historyDates" :key="d" class="history-date-header">
+                    <div class="history-date-day">{{ formatDateDay(d) }}</div>
+                    <div class="history-date-weekday">{{ formatDateWeekday(d) }}</div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="u in users" :key="u.username">
+                  <td class="history-sticky-col">
+                    <div class="history-heatmap-user">
+                      <img
+                        v-if="isAvatarOk(u.username)"
+                        :src="getAvatarSrc(u.username)"
+                        :alt="displayName(u.username)"
+                        class="history-row-avatar"
+                        draggable="false"
+                        @dragstart.prevent
+                        @error="markAvatarError(u.username)"
+                      />
+                      <div class="history-heatmap-user-name">{{ displayName(u.username) }}</div>
+                    </div>
+                  </td>
+                  <td
+                    v-for="d in historyDates"
+                    :key="d"
+                    class="history-heatmap-cell"
+                    :class="{ 'is-today': d === todayIsoString(), 'is-selected': historyDetailDate === d }"
+                    :style="cellStyle(u, d)"
+                    @click="selectHistoryDate(d)"
+                  >
+                    <span class="history-cell-text">{{ cellDurationText(u, d) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div v-if="historyDetailDate" class="history-detail">
+          <div class="history-detail-head">
+            <div class="history-detail-title">{{ formatDateFull(historyDetailDate) }}</div>
+            <button class="simple-btn" @click="historyDetailDate = ''">收起</button>
+          </div>
+          <div class="history-detail-list">
+            <div v-for="u in users" :key="u.username" class="history-detail-row">
+              <div class="history-detail-user">
                 <img
                   v-if="isAvatarOk(u.username)"
                   :src="getAvatarSrc(u.username)"
-                  :alt="u.username"
-                  class="user-avatar user-avatar-sm"
+                  :alt="displayName(u.username)"
+                  class="history-detail-avatar"
                   draggable="false"
                   @dragstart.prevent
                   @error="markAvatarError(u.username)"
                 />
-                <div class="history-user-name">{{ displayName(u.username) }}</div>
+                <span>{{ displayName(u.username) }}</span>
               </div>
-              <div class="history-user-today">今日：{{ formatSeconds(todaySecondsForUser(u)) }}</div>
-            </div>
-
-            <div class="history-day-grid">
-              <div v-for="h in historyListForUser(u)" :key="h.date" class="history-day-item">
-                <div class="history-day-date">{{ shortDate(h.date) }}</div>
-                <div class="history-day-seconds">{{ formatSeconds(h.seconds) }}</div>
-              </div>
+              <div class="history-detail-time">{{ formatSeconds(secondsForUserOnDate(u, historyDetailDate)) }}</div>
             </div>
           </div>
         </div>
+
+        <div class="history-load-more">
+          <button v-if="canLoadMore" class="simple-btn" @click="loadMoreHistory">加载更早</button>
+          <div v-else class="history-range-end">已到最早记录</div>
+        </div>
       </div>
     </div>
+
+    <!-- 换积分二次确认 -->
+    <div v-if="confirmExchangeTodo" class="overlay overlay-todo-exchange" @click.self="confirmExchangeTodo = null">
+      <div class="confirm-panel" :class="todoThemeClass">
+        <div class="confirm-title">确认换积分</div>
+        <div class="confirm-body">
+          完成任务「<strong>{{ confirmExchangeTodo.text }}</strong>」可获得 <strong>{{ POINTS_PER_TODO }}</strong> 积分，确认后将无法恢复。
+        </div>
+        <div class="confirm-actions">
+          <button class="simple-btn" @click="confirmExchangeTodo = null">取消</button>
+          <button class="simple-btn simple-btn-primary" @click="doExchangeTodo">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 英语单词 PK 浮动入口：右上角单独放置，更显眼 -->
+    <button
+      class="english-pk-float-btn"
+      type="button"
+      title="英语单词 PK"
+      @click="openEnglishQuiz"
+    >
+      <span class="english-pk-float-icon">🎯</span>
+      <span class="english-pk-float-text">PK</span>
+    </button>
+
+    <!-- 便利贴：小白 + 小鸡毛 -->
+    <StickyNotes :me="me" :users="users" />
+
+    <!-- 英语单词 PK 弹窗 -->
+    <EnglishQuizModal
+      v-if="showEnglishQuiz"
+      :me="me"
+      :users="users"
+      :quiz="currentEnglishQuiz"
+      :status="englishQuizStatus"
+      :result="englishQuizResult"
+      :stats="englishQuizStats"
+      @close="showEnglishQuiz = false"
+      @answer="answerEnglishQuiz"
+      @next="loadEnglishQuiz"
+    />
+
+    <!-- 桌面宠物：两只线条小狗，可拖动、可投喂 -->
+    <DesktopPet
+      :me="me"
+      :users="users"
+      @open-todo="({ username, editable }) => openTodo(username, editable)"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
+import DesktopPet from '../components/DesktopPet.vue'
+import EnglishQuizModal from '../components/EnglishQuizModal.vue'
+import StickyNotes from '../components/StickyNotes.vue'
 
 const router = useRouter()
 
 // 背景场景（bg1~bg5）：仅切换背景与小狗热点；不影响其它功能
-const BG_SCENE_COUNT = 5
+const BG_SCENE_COUNT = 11
 const BG_SCENE_STORAGE_KEY = 'bg_scene_id'
 const bgSceneId = ref(1)
 
@@ -614,6 +761,17 @@ const newMessageText = ref('')
 const messageLoading = ref(false)
 const messageSending = ref(false)
 const messageError = ref('')
+const messageLastReadAt = ref('')
+
+const MESSAGE_LAST_READ_KEY = 'messageLastReadAt'
+
+const hasUnreadMessages = computed(() => {
+  const list = messages.value || []
+  if (!list.length) return false
+  const lastRead = messageLastReadAt.value
+  if (!lastRead) return true
+  return list.some((m) => m.createdAt && m.createdAt > lastRead)
+})
 
 // 在线状态（presence）：前端轮询 /api/presence
 const presenceByName = ref({})
@@ -838,6 +996,12 @@ async function toggleMessageMenu() {
     showCountdownMenu.value = false
     showMusicMenu.value = false
     await loadMessagesFromServer()
+    messageLastReadAt.value = new Date().toISOString()
+    try {
+      localStorage.setItem(MESSAGE_LAST_READ_KEY, messageLastReadAt.value)
+    } catch (_) {
+      // ignore
+    }
     await nextTick()
     initCornerMenuPosIfNeeded('message')
     ensureCornerMenuPosInView('message')
@@ -870,11 +1034,11 @@ let clockTimer = null
 
 const me = ref(null)
 const users = ref([
-  { username: '小鸡毛', todos: [], todayStudySeconds: 0 },
-  { username: '小白', todos: [], todayStudySeconds: 0 }
+  { username: '小鸡毛', todos: [], todayStudySeconds: 0, runawayMarks: 0 },
+  { username: '小白', todos: [], todayStudySeconds: 0, runawayMarks: 0 }
 ])
 
-const historyDays = 14
+const historyDays = ref(14)
 const earliestDate = ref('')
 const loadedStartDate = ref('')
 const loadedEndDate = ref('')
@@ -885,6 +1049,8 @@ const canLoadMore = computed(() => {
 })
 
 const newTodoText = ref('')
+const confirmExchangeTodo = ref(null)
+const POINTS_PER_TODO = 5
 
 // 占位素材
 const leftChar = '/assets/placeholders/character_left.svg'
@@ -898,6 +1064,77 @@ const showHistory = ref(false)
 const showTodo = ref(false)
 const todoTargetUsername = ref('')
 const todoEditable = ref(false)
+
+const showEnglishQuiz = ref(false)
+const currentEnglishQuiz = ref({})
+const englishQuizStatus = ref('loading')
+const englishQuizResult = ref(null)
+const englishQuizStats = ref({})
+
+async function openEnglishQuiz() {
+  showEnglishQuiz.value = true
+  englishQuizStatus.value = 'loading'
+  englishQuizResult.value = null
+  currentEnglishQuiz.value = {}
+  await loadEnglishQuizStats()
+  await loadEnglishQuiz()
+}
+
+async function loadEnglishQuiz() {
+  englishQuizStatus.value = 'loading'
+  englishQuizResult.value = null
+  currentEnglishQuiz.value = {}
+  try {
+    const data = await apiGet('/api/english-quiz')
+    if (data?.status === 'unavailable') {
+      englishQuizStatus.value = 'unavailable'
+      currentEnglishQuiz.value = { reason: data.reason || '出题服务暂不可用' }
+      return
+    }
+    if (data?.question && data?.options && data?.answer) {
+      englishQuizStatus.value = 'pending'
+      currentEnglishQuiz.value = {
+        mode: data.mode || 'en_to_cn',
+        question: data.question,
+        options: data.options,
+        answer: data.answer,
+        explanation: data.explanation || ''
+      }
+      return
+    }
+    englishQuizStatus.value = 'unavailable'
+    currentEnglishQuiz.value = { reason: '题目加载失败' }
+  } catch (e) {
+    englishQuizStatus.value = 'unavailable'
+    currentEnglishQuiz.value = { reason: e?.message || '题目加载失败' }
+  }
+}
+
+async function loadEnglishQuizStats() {
+  try {
+    const data = await apiGet('/api/english-quiz/stats')
+    englishQuizStats.value = data?.stats || {}
+  } catch {
+    englishQuizStats.value = {}
+  }
+}
+
+async function answerEnglishQuiz({ selectedOption }) {
+  try {
+    englishQuizStatus.value = 'loading'
+    const data = await apiPost('/api/english-quiz/answer', { selectedOption })
+    englishQuizResult.value = {
+      correct: !!data?.correct,
+      answer: data?.answer,
+      explanation: data?.explanation
+    }
+    englishQuizStatus.value = 'result'
+    await loadEnglishQuizStats()
+  } catch (e) {
+    alert(e?.message || '提交答案失败')
+    englishQuizStatus.value = 'pending'
+  }
+}
 
 function displayName(username) {
   if (username === 'userA' || username === '小鸡毛') return '小鸡毛'
@@ -963,12 +1200,16 @@ async function refreshOverviewSecondsOnly() {
   try {
     const overview = await apiGet('/api/overview/today')
     const byName = new Map(
-      (Array.isArray(overview?.users) ? overview.users : []).map((u) => [u.username, Number(u?.todayStudySeconds || 0)])
+      (Array.isArray(overview?.users) ? overview.users : []).map((u) => [
+        u.username,
+        { todayStudySeconds: Number(u?.todayStudySeconds || 0), runawayMarks: Number(u?.runawayMarks || 0) }
+      ])
     )
     users.value = (users.value || []).map((u) => {
       if (!u?.username) return u
-      if (!byName.has(u.username)) return u
-      return { ...u, todayStudySeconds: byName.get(u.username) }
+      const incoming = byName.get(u.username)
+      if (!incoming) return u
+      return { ...u, todayStudySeconds: incoming.todayStudySeconds, runawayMarks: incoming.runawayMarks }
     })
   } catch (_) {
     // ignore
@@ -1253,6 +1494,8 @@ const todoThemeClass = computed(() => {
   return 'todo-theme-white'
 })
 
+const todoRunawayMarks = computed(() => Number(todoUser.value?.runawayMarks || 0))
+
 function closeTodo() {
   showTodo.value = false
 }
@@ -1290,11 +1533,125 @@ function historyListForUser(u) {
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 }
 
+const historyDetailDate = ref('')
+
+function setHistoryRange(days) {
+  historyDays.value = days
+  historyDetailDate.value = ''
+  reloadHistoryFromToday()
+}
+
+const historyDates = computed(() => {
+  const all = new Set()
+  for (const u of users.value) {
+    for (const h of (u.history || [])) {
+      if (h?.date) all.add(h.date)
+    }
+  }
+  const today = todayIsoString()
+  return Array.from(all)
+    .filter((d) => d <= today)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+})
+
+const historyRangeText = computed(() => {
+  const dates = historyDates.value
+  if (!dates.length) return '暂无记录'
+  const start = dates[0]
+  const end = dates[dates.length - 1]
+  return `${start} ~ ${end}`
+})
+
+const historyStats = computed(() => {
+  let totalSeconds = 0
+  let maxSeconds = 0
+  let activeDayCount = 0
+  const uniqueDates = new Set()
+  for (const u of users.value) {
+    for (const h of (u.history || [])) {
+      if (!h?.date || h.date > todayIsoString()) continue
+      const s = Number(h.seconds || 0)
+      totalSeconds += s
+      maxSeconds = Math.max(maxSeconds, s)
+      if (s > 0) {
+        activeDayCount += 1
+        uniqueDates.add(h.date)
+      }
+    }
+  }
+  const sortedDates = Array.from(uniqueDates).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+  let streak = 0
+  for (const d of sortedDates) {
+    if (d === addDaysISO(todayIsoString(), -streak)) streak += 1
+    else break
+  }
+  const avgSeconds = activeDayCount > 0 ? Math.round(totalSeconds / activeDayCount) : 0
+  return { totalSeconds, avgSeconds, streakDays: streak, maxSeconds }
+})
+
+function secondsForUserOnDate(u, date) {
+  const h = (u?.history || []).find((x) => x.date === date)
+  return h ? Number(h.seconds || 0) : 0
+}
+
+function formatDateDay(dateISO) {
+  if (!dateISO) return ''
+  const parts = dateISO.split('-')
+  return parts.length === 3 ? `${parts[1]}-${parts[2]}` : dateISO
+}
+
+function formatDateWeekday(dateISO) {
+  if (!dateISO) return ''
+  const [y, m, d] = dateISO.split('-').map((x) => Number(x))
+  const dt = new Date(y, m - 1, d)
+  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return days[dt.getDay()]
+}
+
+function formatDateFull(dateISO) {
+  if (!dateISO) return ''
+  const [y, m, d] = dateISO.split('-').map((x) => Number(x))
+  const dt = new Date(y, m - 1, d)
+  const yyyy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return `${yyyy}-${mm}-${dd} ${days[dt.getDay()]}`
+}
+
+function cellStyle(u, date) {
+  const seconds = secondsForUserOnDate(u, date)
+  const max = Math.max(historyStats.value.maxSeconds, 1)
+  const ratio = Math.min(1, seconds / max)
+  const hue = isLeftUser(u.username) ? 45 : 210
+  const sat = 30 + ratio * 70
+  const light = 95 - ratio * 35
+  return {
+    backgroundColor: `hsla(${hue}, ${sat}%, ${light}%, ${0.35 + ratio * 0.65})`,
+    color: ratio > 0.5 ? 'rgba(255,255,255,0.98)' : 'rgba(20,10,18,0.92)'
+  }
+}
+
+function cellDurationText(u, date) {
+  const seconds = secondsForUserOnDate(u, date)
+  if (seconds <= 0) return '—'
+  const s = Math.floor(seconds)
+  const hh = Math.floor(s / 3600)
+  const mm = Math.floor((s % 3600) / 60)
+  if (hh > 0) return `${hh}:${String(mm).padStart(2, '0')}`
+  return `${mm}m`
+}
+
+function selectHistoryDate(date) {
+  historyDetailDate.value = historyDetailDate.value === date ? '' : date
+}
+
 async function reloadHistoryFromToday() {
   error.value = ''
+  historyDetailDate.value = ''
   try {
     const end = todayIsoString()
-    const history = await apiGet(`/api/study/history?days=${historyDays}&end=${end}`)
+    const history = await apiGet(`/api/study/history?days=${historyDays.value}&end=${end}`)
 
     earliestDate.value = history.earliestDate || ''
     loadedStartDate.value = history.startDate || ''
@@ -1464,7 +1821,7 @@ async function refresh() {
     me.value = profile.user
 
     const overview = await apiGet('/api/overview/today')
-    const history = await apiGet(`/api/study/history?days=${historyDays}`)
+    const history = await apiGet(`/api/study/history?days=${historyDays.value}`)
 
     earliestDate.value = history.earliestDate || ''
     loadedStartDate.value = history.startDate || ''
@@ -1486,7 +1843,7 @@ async function loadMoreHistory() {
   try {
     // 继续向过去翻一页：end = 当前已加载 start 的前一天
     const nextEnd = addDaysISO(loadedStartDate.value, -1)
-    const history = await apiGet(`/api/study/history?days=${historyDays}&end=${nextEnd}`)
+    const history = await apiGet(`/api/study/history?days=${historyDays.value}&end=${nextEnd}`)
 
     earliestDate.value = history.earliestDate || earliestDate.value
     loadedStartDate.value = history.startDate || loadedStartDate.value
@@ -1518,9 +1875,17 @@ async function addTodo() {
   }
 }
 
-async function toggleTodo(todo) {
+function askExchangeTodo(todo) {
+  if (!todoEditable.value || todo.done) return
+  confirmExchangeTodo.value = todo
+}
+
+async function doExchangeTodo() {
+  const todo = confirmExchangeTodo.value
+  if (!todo) return
   try {
-    await apiPatch(`/api/todos/${todo.id}`, { done: !todo.done })
+    await apiPatch(`/api/todos/${todo.id}`, { done: true })
+    confirmExchangeTodo.value = null
     await refresh()
   } catch (e) {
     error.value = e?.message || String(e)
@@ -1754,6 +2119,11 @@ onMounted(async () => {
   loadCornerMenuPos('countdown')
   loadCornerMenuPos('music')
   loadCornerMenuPos('message')
+  try {
+    messageLastReadAt.value = localStorage.getItem(MESSAGE_LAST_READ_KEY) || ''
+  } catch (_) {
+    // ignore
+  }
   loadCountdownCache()
   await refresh()
   await loadPresence()
@@ -1885,6 +2255,11 @@ watchEffect(() => {
   z-index: 220;
 }
 
+.corner-message-btn{
+  position: relative;
+  display: inline-block;
+}
+
 .corner-message-row{
   display: flex;
   align-items: center;
@@ -1938,6 +2313,20 @@ watchEffect(() => {
     0 26px 46px rgba(0,0,0,0.26),
     0 0 0 14px rgba(120, 120, 255, 0.16);
   filter: saturate(1.06) brightness(1.02);
+}
+
+.message-unread-dot{
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(255, 77, 79, 0.45);
+  pointer-events: none;
+  z-index: 3;
 }
 
 .message-menu{
@@ -2470,6 +2859,58 @@ watchEffect(() => {
   padding: 0 16px;
 }
 
+.english-pk-float-btn{
+  position: fixed;
+  top: 170px;
+  right: 20px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 200, 80, 0.85);
+  background: linear-gradient(135deg, #ff5e62 0%, #ff9966 100%);
+  color: #fff;
+  font-weight: 950;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow:
+    0 10px 28px rgba(255, 94, 98, 0.45),
+    0 0 0 4px rgba(255, 255, 255, 0.15) inset;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  animation: pkPulse 2.2s ease-in-out infinite;
+}
+
+.english-pk-float-btn:hover{
+  transform: scale(1.1) rotate(-4deg);
+  box-shadow:
+    0 14px 36px rgba(255, 94, 98, 0.55),
+    0 0 0 4px rgba(255, 255, 255, 0.2) inset;
+}
+
+.english-pk-float-btn:active{
+  transform: scale(0.96);
+}
+
+.english-pk-float-icon{
+  font-size: 24px;
+  line-height: 1;
+}
+
+.english-pk-float-text{
+  font-size: 11px;
+  line-height: 1;
+}
+
+@keyframes pkPulse{
+  0%, 100% { box-shadow: 0 10px 28px rgba(255, 94, 98, 0.45), 0 0 0 4px rgba(255, 255, 255, 0.15) inset; }
+  50% { box-shadow: 0 14px 36px rgba(255, 94, 98, 0.65), 0 0 0 4px rgba(255, 255, 255, 0.25) inset; }
+}
+
 .bg-auto{
   display: inline-flex;
   align-items: center;
@@ -2684,6 +3125,17 @@ watchEffect(() => {
   color: rgba(140, 30, 50, 0.92);
 }
 
+.simple-btn-primary{
+  background: rgba(76, 140, 255, 0.18);
+  border-color: rgba(76, 140, 255, 0.42);
+  color: rgba(40, 80, 180, 0.95);
+}
+
+.simple-btn-primary:hover{
+  background: rgba(76, 140, 255, 0.28);
+  border-color: rgba(76, 140, 255, 0.55);
+}
+
 .hud-timer-text{
   font-weight: 950;
   letter-spacing: 1px;
@@ -2750,6 +3202,15 @@ watchEffect(() => {
   letter-spacing: 1px;
   font-size: 20px;
   min-width: 0;
+  color: rgba(20, 10, 18, 0.95);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+.todo-title-text{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 950;
 }
 
 .user-avatar{
@@ -2757,10 +3218,11 @@ watchEffect(() => {
   height: 72px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid rgba(20, 10, 18, 0.10);
+  border: 2px solid rgba(255, 255, 255, 0.85);
   box-shadow:
-    0 14px 28px rgba(12, 6, 12, 0.14),
-    0 0 0 6px rgba(255, 255, 255, 0.14);
+    0 14px 28px rgba(12, 6, 12, 0.18),
+    0 0 0 6px rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .user-avatar-sm{
@@ -2804,6 +3266,55 @@ watchEffect(() => {
   width: 18px;
   height: 18px;
   opacity: 0.8;
+}
+
+.todo-responsibility-card{
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(20, 10, 18, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 20px rgba(12, 6, 12, 0.08);
+}
+
+.todo-responsibility-card.clean{
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(240, 255, 245, 0.78));
+  border-color: rgba(60, 200, 120, 0.18);
+}
+
+.todo-responsibility-card.has-marks{
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(255, 240, 240, 0.82));
+  border-color: rgba(255, 90, 90, 0.22);
+}
+
+.todo-responsibility-main{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.todo-responsibility-emoji{
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.todo-responsibility-body{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-responsibility-count{
+  font-weight: 950;
+  font-size: 15px;
+  color: rgba(20, 10, 18, 0.92);
+}
+
+.todo-responsibility-thanks{
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(60, 130, 90, 0.85);
 }
 
 .simple-input{
@@ -3101,6 +3612,14 @@ watchEffect(() => {
   flex-wrap: wrap;
 }
 
+.todo-item-icon{
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
 .todo-list{
   margin-top: 12px;
   display: flex;
@@ -3117,6 +3636,8 @@ watchEffect(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border: 1px solid rgba(20, 10, 18, 0.08);
+  box-shadow: 0 10px 24px rgba(12, 6, 12, 0.08);
 }
 
 .todo-left{
@@ -3137,19 +3658,30 @@ watchEffect(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: rgba(20, 10, 18, 0.92);
+}
+
+.todo-empty{
+  margin-top: 12px;
+  text-align: center;
+  font-weight: 900;
+  opacity: 0.75;
+  color: rgba(20, 10, 18, 0.75);
 }
 
 .history-panel{
-  width: 1100px;
+  width: 900px;
   max-width: calc(100% - 24px);
-  height: 720px;
+  height: 660px;
   max-height: calc(100% - 24px);
-  padding: 28px;
+  padding: 22px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .history-panel-simple{
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(20, 10, 18, 0.10);
   box-shadow:
     0 30px 70px rgba(12, 6, 12, 0.18),
@@ -3166,6 +3698,7 @@ watchEffect(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .history-title{
@@ -3175,138 +3708,352 @@ watchEffect(() => {
 }
 
 .history-range{
-  margin-top: 10px;
+  margin-top: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.history-range-presets{
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .history-range-text{
   font-weight: 900;
   opacity: 0.85;
-}
-
-.history-range-actions{
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-size: 14px;
 }
 
 .history-range-end{
   opacity: 0.65;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
 }
 
-.history-grid{
-  margin-top: 14px;
-  height: calc(100% - 120px);
-  overflow: auto;
-  padding-right: 6px;
+.history-stats{
+  margin-top: 16px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-.history-user-card{
+.history-stat-card{
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(20, 10, 18, 0.08);
-  box-shadow: 0 10px 24px rgba(12, 6, 12, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  text-align: center;
+}
+
+.history-stat-label{
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.68;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.history-stat-value{
+  font-size: 19px;
+  font-weight: 950;
+  color: rgba(20, 10, 18, 0.92);
+}
+
+.history-heatmap{
+  margin-top: 18px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(20, 10, 18, 0.08);
   border-radius: 18px;
+  background: rgba(255, 255, 255, 0.56);
+  overflow: hidden;
+}
+
+.history-heatmap-scroll{
+  flex: 1;
+  overflow: auto;
   padding: 14px;
 }
 
-.history-user-head{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+.history-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 8px;
+  table-layout: fixed;
+  min-width: max-content;
 }
 
-.history-user-left{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
+.history-table th,
+.history-table td{
+  padding: 0;
+  vertical-align: middle;
 }
 
-.history-user-name{
-  font-size: 18px;
-  font-weight: 950;
+.history-sticky-col{
+  position: sticky;
+  left: 0;
+  width: 96px;
+  min-width: 96px;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 2;
+  text-align: left;
 }
 
-.history-user-today{
+.history-date-header{
+  min-width: 60px;
+  text-align: center;
   font-weight: 900;
-  opacity: 0.92;
+  font-size: 12px;
+  padding: 8px 0;
 }
 
-.history-day-grid{
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+.history-date-day{
+  opacity: 0.9;
 }
 
-.history-day-item{
-  background: rgba(255, 255, 255, 0.78);
+.history-date-weekday{
+  opacity: 0.55;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.history-heatmap-user{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.history-row-avatar{
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(20, 10, 18, 0.10);
+  flex-shrink: 0;
+}
+
+.history-heatmap-user-name{
+  font-weight: 950;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-heatmap-cell{
+  min-width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 950;
+  font-size: 12px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  user-select: none;
+}
+
+.history-heatmap-cell:hover{
+  transform: translateY(-2px);
+  border-color: rgba(20, 10, 18, 0.18);
+  box-shadow: 0 8px 20px rgba(12, 6, 12, 0.10);
+}
+
+.history-heatmap-cell.is-today{
+  border-color: rgba(76, 140, 255, 0.55);
+}
+
+.history-heatmap-cell.is-selected{
+  border-color: rgba(20, 10, 18, 0.55);
+  box-shadow: 0 8px 20px rgba(12, 6, 12, 0.14);
+}
+
+.history-cell-text{
+  pointer-events: none;
+}
+
+.history-detail{
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(20, 10, 18, 0.08);
-  border-radius: 14px;
-  padding: 10px 12px;
+  flex-shrink: 0;
+}
+
+.history-detail-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.history-detail-title{
+  font-weight: 950;
+  font-size: 16px;
+}
+
+.history-detail-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-detail-row{
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
-.history-day-date{
-  font-weight: 950;
-  opacity: 0.88;
+.history-detail-user{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  font-size: 14px;
 }
 
-.history-day-seconds{
+.history-detail-avatar{
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.history-detail-time{
   font-weight: 950;
+  font-size: 15px;
+}
+
+.history-load-more{
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.simple-btn-active{
+  background: rgba(76, 140, 255, 0.18) !important;
+  border-color: rgba(76, 140, 255, 0.36) !important;
+}
+
+.todo-exchange-btn{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-weight: 950;
+  font-size: 13px;
+  background: rgba(255, 215, 0, 0.22);
+  border: 1px solid rgba(255, 190, 0, 0.45);
+  color: rgba(120, 80, 0, 0.95);
+}
+
+.todo-exchange-btn:hover{
+  background: rgba(255, 215, 0, 0.36);
+  transform: translateY(-1px);
+}
+
+.todo-done-badge{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 950;
+  font-size: 13px;
+  background: rgba(60, 200, 120, 0.14);
+  border: 1px solid rgba(60, 200, 120, 0.35);
+  color: rgba(30, 120, 60, 0.95);
+  flex-shrink: 0;
+}
+
+.overlay-todo-exchange{
+  z-index: 180;
+}
+
+.confirm-panel{
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(20, 10, 18, 0.10);
+  box-shadow: 0 24px 60px rgba(12, 6, 12, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: auto;
+}
+
+.confirm-title{
+  font-weight: 950;
+  font-size: 19px;
+  text-align: center;
+}
+
+.confirm-body{
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+  color: rgba(20, 10, 18, 0.85);
+}
+
+.confirm-body strong{
+  color: rgba(20, 10, 18, 0.95);
+}
+
+.confirm-actions{
+  display: flex;
+  justify-content: center;
+  gap: 12px;
 }
 
 @media (max-width: 980px){
-  .history-grid{ grid-template-columns: 1fr; }
+  .history-stats{ grid-template-columns: repeat(2, 1fr); }
+  .history-stat-value{ font-size: 18px; }
 }
 
 @media (max-width: 1024px){
-  .hud-clock-text{ font-size: 56px; letter-spacing: 2px; }
-  .hud-menu{ right: 20px; top: 20px; gap: 8px; }
-  .hud-menu-top{ flex-wrap: wrap; gap: 8px; }
-  .hud-pomo-row{ flex-wrap: wrap; gap: 10px; }
-  .hud-pomo-left{ flex-wrap: wrap; }
-  .hud-pomo-actions{ width: 100%; justify-content: center; }
-  .pomo-icon{ width: 80px; height: 80px; margin: -10px 0; }
-  .simple-btn{ min-height: 48px; min-width: 60px; padding: 0 16px; }
-  .todo-float{ width: min(420px, calc(100% - 24px)); height: 460px; }
   .history-panel{ width: 100%; max-width: calc(100% - 24px); padding: 18px; }
-  .history-grid{ grid-template-columns: 1fr; }
-  .message-menu{ width: min(420px, calc(100vw - 32px)); }
-  .music-menu{ width: min(280px, calc(100vw - 32px)); }
-  .countdown-menu{ width: min(460px, calc(100vw - 32px)); }
-  .user-avatar{ width: 60px; height: 60px; }
-  .user-avatar-sm{ width: 44px; height: 44px; }
+  .history-title{ font-size: 20px; }
+  .history-stat-card{ padding: 12px; }
 }
 
 @media (max-width: 768px){
-  .hud-clock-text{ font-size: 40px; letter-spacing: 1px; }
-  .hud-clock{ max-width: calc(100% - 90px); }
-  .hud-pomo-row{ padding: 8px 10px; }
-  .hud-pomo-actions{ gap: 8px; }
-  .simple-btn{ font-size: 13px; min-height: 44px; padding: 0 12px; }
-  .hud-pomo-label{ font-size: 14px; }
-  .hud-pomo-time{ font-size: 20px; }
-  .todo-float{ width: min(360px, calc(100% - 16px)); height: 420px; }
-  .user-name{ font-size: 16px; }
+  .history-stats{ grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .history-stat-label{ font-size: 11px; }
+  .history-stat-value{ font-size: 16px; }
+  .history-heatmap-cell{ min-width: 48px; height: 48px; font-size: 11px; }
+  .history-date-header{ min-width: 48px; }
+  .history-sticky-col{ width: 80px; min-width: 80px; }
+  .history-row-avatar{ width: 28px; height: 28px; }
+  .history-heatmap-user-name{ font-size: 12px; }
   .history-title{ font-size: 18px; }
-  .history-day-grid{ grid-template-columns: 1fr; }
 }
 
 @media (pointer: coarse){
+  .history-heatmap-cell:hover{ transform: none; }
+  .history-heatmap-cell{ min-height: 48px; min-width: 48px; }
   .simple-btn:hover,
   .corner-countdown-badge:hover,
   .corner-music-icon:hover,
