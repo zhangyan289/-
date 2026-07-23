@@ -289,7 +289,7 @@ const EATING_GIF_MAP = {
   eating_gougebao: 'food_gougebao.gif'
 }
 const POINTS_PER_TODO = 5
-const POINTS_PER_STUDY_MINUTE = 1 / 60 // 每学 1 小时涨 1 积分
+const POINTS_PER_STUDY_MINUTE = 1 // 每学 1 分钟涨 1 积分
 const PET_HAPPINESS_DECAY_PER_HOUR = 5 // 每小时减 5 愉悦度
 const PET_RUNAWAY_THRESHOLD_HOURS = 3
 const PET_FEED_COOLDOWN_MINUTES = 0 // 不加喂食冷却，支持连续喂食

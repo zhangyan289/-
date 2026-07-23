@@ -291,8 +291,8 @@ function pickSceneFxTypes(id) {
     case 5: return ['dandelion', 'motes']     // 草地：蒲公英 + 浮尘
     case 6: return ['fireflies', 'sparks', 'bokeh'] // 露营篝火：萤火虫 + 火星 + 柔光
     case 7: return ['fireflies', 'sparks', 'leaves'] // 森林篝火：萤火虫 + 火星 + 落叶
-    case 8: return ['butterflies', 'bokeh']   // 花田：蝴蝶 + 柔光（稍微减少）
-    case 9: return ['butterflies', 'birds']    // 地中海小镇：蝴蝶 + 海鸥（稍微减少）
+    case 8: return ['butterflies', 'bokeh']   // 花田：蝴蝶 + 柔光（蝴蝶已减量）
+    case 9: return ['birds', 'motes']          // 地中海小镇：海鸥 + 浮尘（去掉蝴蝶）
     case 10: return ['bubbles', 'bokeh']      // 水上乐园：气泡 + 柔光（稍微减少）
     case 11: return ['leaves', 'bokeh', 'motes']     // 秋日农场：落叶 + 柔光 + 金尘
     default: return ['motes']
@@ -488,7 +488,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'butterflies') {
-    const count = 12
+    const count = 8
     const butterflies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       const speed = (0.06 + fxRand(s + 1) * 0.12) * Math.min(w, h)
