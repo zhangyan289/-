@@ -1,6 +1,12 @@
 <template>
-  <div v-if="visible" class="pet-status-panel" :class="themeClass" @click.stop>
-    <div class="pet-status-head">
+  <div
+    v-if="visible"
+    class="pet-status-panel"
+    :class="themeClass"
+    :style="panelStyle"
+    @click.stop
+  >
+    <div class="pet-status-head" @pointerdown="onHeaderPointerDown">
       <div class="pet-status-title">
         <img
           class="pet-status-avatar"
@@ -15,7 +21,7 @@
           <div v-if="runawayCountdown" class="pet-status-countdown">{{ runawayCountdown }}</div>
         </div>
       </div>
-      <button class="pet-status-close" type="button" @click="$emit('close')">✕</button>
+      <button class="pet-status-close" type="button" @pointerdown.stop @click="$emit('close')">✕</button>
     </div>
 
     <div class="pet-status-bars">
@@ -106,23 +112,99 @@ const showFeedMenu = ref(false)
 const pointsChange = ref({ show: false, text: '', class: '' })
 let pointsChangeTimer = null
 
-const RUNAWAY_THRESHOLD_MS = 3 * 60 * 60 * 1000
-const countdownNow = ref(Date.now())
-let countdownTimer = null
+const panelX = ref(24)
+const panelY = ref(0)
+
+const drag = {
+  active: false,
+  startX: 0,
+  startY: 0,
+  offsetX: 0,
+  offsetY: 0
+}
+
+const panelStyle = computed(() => ({
+  left: `${panelX.value}px`,
+  top: `${panelY.value}px`
+}))
+
+function setInitialPosition() {
+  const h = typeof window !== 'undefined' ? window.innerHeight : 800
+  panelY.value = Math.max(80, h - 340)
+}
 
 onMounted(() => {
+  setInitialPosition()
   countdownTimer = setInterval(() => {
     countdownNow.value = Date.now()
   }, 1000)
+  window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
   if (countdownTimer) clearInterval(countdownTimer)
+  window.removeEventListener('resize', onResize)
 })
+
+function onResize() {
+  const w = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const h = typeof window !== 'undefined' ? window.innerHeight : 800
+  const panelW = 320
+  const panelH = 420
+  panelX.value = Math.max(8, Math.min(w - panelW - 8, panelX.value))
+  panelY.value = Math.max(8, Math.min(h - panelH - 8, panelY.value))
+}
 
 watch(() => props.visible, (open) => {
   if (!open) showFeedMenu.value = false
+  if (open) {
+    setInitialPosition()
+    panelX.value = 24
+  }
 })
+
+function onHeaderPointerDown(e) {
+  if (!e.isPrimary) return
+  e.preventDefault()
+  e.stopPropagation()
+
+  drag.active = false
+  drag.startX = e.clientX
+  drag.startY = e.clientY
+  drag.offsetX = e.clientX - panelX.value
+  drag.offsetY = e.clientY - panelY.value
+
+  window.addEventListener('pointermove', onHeaderPointerMove)
+  window.addEventListener('pointerup', onHeaderPointerUp)
+  window.addEventListener('pointercancel', onHeaderPointerUp)
+  try { e.currentTarget?.setPointerCapture?.(e.pointerId) } catch (_) {}
+}
+
+function onHeaderPointerMove(e) {
+  if (!drag.startX && !drag.startY) return
+  const dx = Math.abs(e.clientX - drag.startX)
+  const dy = Math.abs(e.clientY - drag.startY)
+  if (!drag.active && (dx > 3 || dy > 3)) {
+    drag.active = true
+  }
+  if (!drag.active) return
+
+  const w = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const h = typeof window !== 'undefined' ? window.innerHeight : 800
+  const panelW = 320
+  const panelH = 420
+  panelX.value = Math.max(8, Math.min(w - panelW - 8, e.clientX - drag.offsetX))
+  panelY.value = Math.max(8, Math.min(h - panelH - 8, e.clientY - drag.offsetY))
+}
+
+function onHeaderPointerUp(e) {
+  window.removeEventListener('pointermove', onHeaderPointerMove)
+  window.removeEventListener('pointerup', onHeaderPointerUp)
+  window.removeEventListener('pointercancel', onHeaderPointerUp)
+  drag.startX = 0
+  drag.startY = 0
+  drag.active = false
+}
 
 const themeClass = computed(() => (props.pet.key === 'golden' ? 'pet-theme-golden' : 'pet-theme-white'))
 
@@ -219,7 +301,7 @@ function formatFeedTime(fedAt) {
 <style scoped>
 .pet-status-panel{
   position: fixed;
-  bottom: 200px;
+  top: 0;
   left: 24px;
   width: 320px;
   max-width: calc(100vw - 32px);
@@ -229,6 +311,7 @@ function formatFeedTime(fedAt) {
   z-index: 150;
   pointer-events: auto;
   user-select: none;
+  touch-action: none;
 }
 
 .pet-theme-golden{
@@ -249,6 +332,17 @@ function formatFeedTime(fedAt) {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 14px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.pet-status-head:active{
+  cursor: grabbing;
+}
+
+.pet-status-head .pet-status-close{
+  cursor: pointer;
+  touch-action: auto;
 }
 
 .pet-status-title{

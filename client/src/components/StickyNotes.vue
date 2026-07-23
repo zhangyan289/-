@@ -1,5 +1,11 @@
 <template>
-  <div v-if="myNotes" class="sticky-notes-container" aria-label="便利贴">
+  <div
+    v-if="myNotes"
+    ref="notesContainerEl"
+    class="sticky-notes-container"
+    aria-label="便利贴"
+    @pointerdown="onContainerPointerDown"
+  >
     <div class="sticky-notes-user-header">
       <img
         class="sticky-notes-avatar"
@@ -38,6 +44,52 @@ const props = defineProps({
 
 const allNotes = ref({})
 let pollTimer = null
+const notesContainerEl = ref(null)
+
+const dragScroll = {
+  active: false,
+  startY: 0,
+  startScrollTop: 0
+}
+
+function onContainerPointerDown(e) {
+  if (!e.isPrimary) return
+  // 点击子元素时不启用拖拽滚动
+  if (e.target !== notesContainerEl.value && !e.target?.classList?.contains('sticky-notes-list')) return
+
+  const el = notesContainerEl.value
+  if (!el) return
+
+  dragScroll.active = false
+  dragScroll.startY = e.clientY
+  dragScroll.startScrollTop = el.scrollTop
+
+  window.addEventListener('pointermove', onContainerPointerMove)
+  window.addEventListener('pointerup', onContainerPointerUp)
+  window.addEventListener('pointercancel', onContainerPointerUp)
+  try { e.currentTarget?.setPointerCapture?.(e.pointerId) } catch (_) {}
+}
+
+function onContainerPointerMove(e) {
+  if (dragScroll.startY === 0) return
+  const dy = Math.abs(e.clientY - dragScroll.startY)
+  if (!dragScroll.active && dy > 6) {
+    dragScroll.active = true
+  }
+  if (!dragScroll.active) return
+
+  const el = notesContainerEl.value
+  if (!el) return
+  el.scrollTop = dragScroll.startScrollTop - (e.clientY - dragScroll.startY)
+}
+
+function onContainerPointerUp(e) {
+  window.removeEventListener('pointermove', onContainerPointerMove)
+  window.removeEventListener('pointerup', onContainerPointerUp)
+  window.removeEventListener('pointercancel', onContainerPointerUp)
+  dragScroll.startY = 0
+  dragScroll.active = false
+}
 
 const myUsername = computed(() => props.me?.username || '')
 
@@ -119,10 +171,38 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  pointer-events: none;
+  pointer-events: auto;
   max-height: calc(100vh - 300px);
   overflow-y: auto;
   width: 220px;
+  padding-right: 8px;
+  scroll-behavior: auto;
+  overscroll-behavior: contain;
+  cursor: grab;
+  touch-action: none;
+}
+
+.sticky-notes-container:active{
+  cursor: grabbing;
+}
+
+/* 自定义滚动条 */
+.sticky-notes-container::-webkit-scrollbar{
+  width: 6px;
+}
+
+.sticky-notes-container::-webkit-scrollbar-track{
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+}
+
+.sticky-notes-container::-webkit-scrollbar-thumb{
+  background: rgba(120, 100, 80, 0.45);
+  border-radius: 999px;
+}
+
+.sticky-notes-container::-webkit-scrollbar-thumb:hover{
+  background: rgba(120, 100, 80, 0.65);
 }
 
 .sticky-notes-user-header{
@@ -136,20 +216,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 12px rgba(12, 6, 12, 0.08);
   backdrop-filter: blur(4px);
   pointer-events: auto;
-}
-
-.sticky-notes-avatar{
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.85);
-}
-
-.sticky-notes-user-name{
-  font-weight: 950;
-  font-size: 13px;
-  color: rgba(40, 20, 10, 0.9);
+  cursor: default;
+  flex-shrink: 0;
 }
 
 .sticky-notes-list{
@@ -157,6 +225,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 10px;
   pointer-events: auto;
+  cursor: default;
+  flex-shrink: 0;
 }
 
 .sticky-note{
@@ -170,6 +240,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  pointer-events: auto;
+  cursor: default;
 }
 
 .sticky-note:hover{
@@ -209,7 +281,8 @@ onBeforeUnmount(() => {
 }
 
 .note-control,
-.note-modern_control{
+.note-modern_control,
+.note-specialty{
   background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
   border: 1px solid rgba(180, 80, 120, 0.25);
   color: rgba(70, 20, 40, 0.95);
@@ -257,6 +330,7 @@ onBeforeUnmount(() => {
     top: 240px;
     right: 12px;
     width: 180px;
+    max-height: calc(100vh - 280px);
   }
 
   .sticky-note{

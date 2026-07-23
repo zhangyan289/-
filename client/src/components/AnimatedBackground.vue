@@ -317,7 +317,8 @@ function ensureFxCanvasSize() {
   const canvas = fxCanvasEl.value
   if (!canvas) return null
   const rect = canvas.getBoundingClientRect()
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1))
+  // 以流畅度优先：限制 DPR，避免高分辨率设备上 canvas 像素过大导致卡顿
+  const dpr = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1))
   const w = Math.max(1, Math.floor(rect.width * dpr))
   const h = Math.max(1, Math.floor(rect.height * dpr))
   if (canvas.width !== w || canvas.height !== h) {
@@ -341,7 +342,7 @@ function initFxState(type, w, h) {
   const seedBase = clampSceneId(sceneId.value) * 1000
 
   if (type === 'motes') {
-    const count = 130
+    const count = 65
     const parts = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 9.7
       return {
@@ -359,7 +360,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bokeh') {
-    const count = 28
+    const count = 14
     const blobs = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.3
       const rr = 70 + fxRand(s + 1) * 170
@@ -415,7 +416,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'dandelion') {
-    const seedCount = 48
+    const seedCount = 24
     const seeds = Array.from({ length: seedCount }, (_, i) => {
       const s = seedBase + i * 19.3
       const scale = 0.8 + fxRand(s + 1) * 1.4
@@ -435,7 +436,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'fireflies') {
-    const count = 56
+    const count = 28
     const flies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 17.9
       return {
@@ -471,7 +472,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'meteors') {
-    const starCount = 110
+    const starCount = 55
     const stars = Array.from({ length: starCount }, (_, i) => {
       const s = seedBase + i * 13.7
       return {
@@ -487,7 +488,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'butterflies') {
-    const count = 32
+    const count = 16
     const butterflies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       const speed = (0.06 + fxRand(s + 1) * 0.12) * Math.min(w, h)
@@ -514,7 +515,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'glints') {
-    const count = 140
+    const count = 70
     const glints = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 21.1
       const r = 14 + fxRand(s + 1) * 62
@@ -537,7 +538,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'sparks') {
-    const count = 54
+    const count = 27
     const sparks = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 27.3
       return {
@@ -557,7 +558,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'leaves') {
-    const count = 46
+    const count = 23
     const leaves = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.7
       return {
@@ -579,7 +580,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'sakura') {
-    const count = 66
+    const count = 33
     const petals = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       return {
@@ -601,7 +602,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bubbles') {
-    const count = 65
+    const count = 33
     const bubbles = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 23.7
       return {
@@ -623,7 +624,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'birds') {
-    const count = 18
+    const count = 9
     const birds = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 41.1
       return {
