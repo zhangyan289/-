@@ -197,6 +197,27 @@ export function migrateEnglishQuizTables(db) {
       );
     `)
   }
+  if (!tables.includes('pet_quiz_state')) {
+    db.exec(`
+      CREATE TABLE pet_quiz_state (
+        pet_key TEXT PRIMARY KEY,
+        question TEXT NOT NULL,
+        options TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        explanation TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        answered_at TEXT
+      );
+    `)
+  }
+}
+
+export function migrateStudyDailyColumns(db) {
+  const cols = db.prepare("PRAGMA table_info(study_daily)").all()
+  const hasPointsAwarded = cols.some((c) => c.name === 'points_awarded_hours')
+  if (!hasPointsAwarded) {
+    db.prepare('ALTER TABLE study_daily ADD COLUMN points_awarded_hours INTEGER NOT NULL DEFAULT 0').run()
+  }
 }
 
 export function seedPetStatesIfEmpty(db) {

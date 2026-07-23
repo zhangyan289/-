@@ -7,7 +7,7 @@ import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
-import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, addUserPetInventoryColumns, migrateEnglishQuizTables } from './db/database.js'
+import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, addUserPetInventoryColumns, migrateEnglishQuizTables, migrateStudyDailyColumns } from './db/database.js'
 import { seedPresetUsers, seedSampleDataIfEmpty } from './db/seed.js'
 import { authRequired } from './middleware/auth.js'
 
@@ -82,9 +82,11 @@ initSchema(db)
 migratePetStatesV2(db)
 addUserPetInventoryColumns(db)
 migrateEnglishQuizTables(db)
+migrateStudyDailyColumns(db)
 seedPetStatesIfEmpty(db)
 seedPresetUsers(db)
 seedSampleDataIfEmpty(db)
+loadQuizStateFromDb()
 
 const app = express()
 app.use(morgan('dev'))
@@ -289,7 +291,6 @@ const EATING_GIF_MAP = {
   eating_gougebao: 'food_gougebao.gif'
 }
 const POINTS_PER_TODO = 5
-const POINTS_PER_STUDY_MINUTE = 1 // 每学 1 分钟涨 1 积分
 const PET_HAPPINESS_DECAY_PER_HOUR = 5 // 每小时减 5 愉悦度
 const PET_RUNAWAY_THRESHOLD_HOURS = 3
 const PET_FEED_COOLDOWN_MINUTES = 0 // 不加喂食冷却，支持连续喂食
@@ -588,23 +589,55 @@ const quizGenerationLocks = {}
 const QUIZ_PET_PROFILES = {
   golden: {
     name: '小金毛',
-    subjects: '英语、408（数据结构、计算机组成原理、计算机网络、操作系统）',
-    major: '计算机科学与技术'
+    major: '计算机科学与技术',
+    subjects: [
+      { label: '英语一', key: 'english' },
+      { label: '数学一', key: 'math' },
+      { label: '408-数据结构', key: 'ds' },
+      { label: '408-计算机组成原理', key: 'co' },
+      { label: '408-计算机网络', key: 'cn' },
+      { label: '408-操作系统', key: 'os' }
+    ]
   },
   white: {
     name: '小白',
-    subjects: '英语、自动控制原理、现代控制理论',
-    major: '电子信息（0854）'
+    major: '电子信息（0854）',
+    subjects: [
+      { label: '英语二', key: 'english' },
+      { label: '数学二', key: 'math' },
+      { label: '自动控制原理', key: 'control' },
+      { label: '现代控制理论', key: 'modern_control' }
+    ]
   }
+}
+
+const QUIZ_RECENT_QUESTIONS = { golden: [], white: [] }
+const QUIZ_RECENT_LIMIT = 10
+
+// 跨功能去重：记录最近生成的英语单词、桌宠题目、便利贴标题，尽量减少重复
+const SHARED_RECENT_CONTENTS = []
+const SHARED_RECENT_LIMIT = 30
+
+function addSharedRecentContent(text) {
+  if (!text) return
+  SHARED_RECENT_CONTENTS.push(text)
+  if (SHARED_RECENT_CONTENTS.length > SHARED_RECENT_LIMIT) SHARED_RECENT_CONTENTS.shift()
+}
+
+function getSharedRecentContentsText() {
+  const recent = SHARED_RECENT_CONTENTS.slice(-3).join('；')
+  return recent || '无'
 }
 
 function buildQuizPrompt(petKey) {
   const profile = QUIZ_PET_PROFILES[petKey]
-  return `你是考研出题助手。请为"${profile.name}"（${profile.major}，考 ${profile.subjects}）出一道选择题。
+  const subject = profile.subjects[Math.floor(Math.random() * profile.subjects.length)]
+  return `你是考研出题助手。请为"${profile.name}"（${profile.major}）出一道 "${subject.label}" 相关的选择题。
 要求：
 1. 题干明确，4 个选项分别标为 A、B、C、D。
 2. 难度适中，适合考研复习。
-3. 必须只返回 JSON，不要任何解释、问候、markdown、代码块。JSON 格式如下：
+3. 尽量与最近出过的题目不同，也避免与以下内容重复：${getSharedRecentContentsText()}。
+4. 必须只返回 JSON，不要任何解释、问候、markdown、代码块。JSON 格式如下：
 {"question":"题目内容","options":{"A":"选项A","B":"选项B","C":"选项C","D":"选项D"},"answer":"A","explanation":"简短解析"}`
 }
 
@@ -641,7 +674,57 @@ function parseQuizJson(text) {
   }
 }
 
-async function generateQuiz(petKey) {
+function loadQuizStateFromDb() {
+  try {
+    const rows = db.prepare('SELECT * FROM pet_quiz_state').all()
+    for (const row of rows) {
+      try {
+        const options = JSON.parse(row.options)
+        quizCache.set(row.pet_key, {
+          petKey: row.pet_key,
+          question: row.question,
+          options,
+          answer: row.answer,
+          explanation: row.explanation,
+          generatedAt: row.generated_at,
+          answeredAt: row.answered_at
+        })
+      } catch {
+        // ignore invalid rows
+      }
+    }
+  } catch (e) {
+    console.error('[quiz] load state failed:', e?.message || String(e))
+  }
+}
+
+function persistQuizState(petKey, entry) {
+  try {
+    db.prepare(
+      `INSERT INTO pet_quiz_state (pet_key, question, options, answer, explanation, generated_at, answered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(pet_key)
+       DO UPDATE SET question = excluded.question, options = excluded.options, answer = excluded.answer,
+                     explanation = excluded.explanation, generated_at = excluded.generated_at, answered_at = excluded.answered_at`
+    ).run(petKey, entry.question, JSON.stringify(entry.options), entry.answer, entry.explanation, entry.generatedAt, entry.answeredAt || null)
+  } catch (e) {
+    console.error('[quiz] persist state failed:', e?.message || String(e))
+  }
+}
+
+function isDuplicateQuiz(petKey, question) {
+  const recent = QUIZ_RECENT_QUESTIONS[petKey] || []
+  return recent.some((q) => q === question)
+}
+
+function recordQuizQuestion(petKey, question) {
+  const recent = QUIZ_RECENT_QUESTIONS[petKey]
+  recent.push(question)
+  if (recent.length > QUIZ_RECENT_LIMIT) recent.shift()
+  addSharedRecentContent(question)
+}
+
+async function generateQuiz(petKey, retryCount = 0) {
   const existing = quizCache.get(petKey)
   // 已回答且仍在冷却期：直接返回冷却状态，不调用 API
   if (existing && !isQuizAvailable(existing)) {
@@ -667,11 +750,22 @@ async function generateQuiz(petKey) {
   try {
     if (!KIMI_API_KEY) {
       // 没有 key 时使用固定模拟题，方便前端联调
-      const mockQuestion = petKey === 'golden'
-        ? { question: '以下哪种数据结构最适合实现 LRU 缓存？', options: { A: '数组', B: '哈希表 + 双向链表', C: '栈', D: '队列' }, answer: 'B', explanation: 'LRU 需要 O(1) 查找和 O(1) 删除，哈希表 + 双向链表最合适。' }
-        : { question: '自动控制系统的稳定性判据中，奈奎斯特判据主要用于？', options: { A: '时域分析', B: '频域分析', C: '根轨迹分析', D: '状态空间分析' }, answer: 'B', explanation: '奈奎斯特判据基于开环频率特性判断闭环稳定性。' }
+      const mockQuestions = {
+        golden: [
+          { question: '以下哪种数据结构最适合实现 LRU 缓存？', options: { A: '数组', B: '哈希表 + 双向链表', C: '栈', D: '队列' }, answer: 'B', explanation: 'LRU 需要 O(1) 查找和 O(1) 删除，哈希表 + 双向链表最合适。' },
+          { question: '英语一：Which word is closest in meaning to "ephemeral"?', options: { A: 'permanent', B: 'transient', C: 'durable', D: 'eternal' }, answer: 'B', explanation: 'Ephemeral means lasting for a very short time.' },
+          { question: '数学一：函数 f(x) = x^3 - 3x 的极大值点是？', options: { A: 'x = -1', B: 'x = 0', C: 'x = 1', D: 'x = 2' }, answer: 'A', explanation: 'f\'(x)=3x^2-3，令其为 0 得 x=±1，f"(-1)<0，故 x=-1 为极大值点。' }
+        ],
+        white: [
+          { question: '自动控制系统的稳定性判据中，奈奎斯特判据主要用于？', options: { A: '时域分析', B: '频域分析', C: '根轨迹分析', D: '状态空间分析' }, answer: 'B', explanation: '奈奎斯特判据基于开环频率特性判断闭环稳定性。' },
+          { question: '英语二：Which word is closest in meaning to "pragmatic"?', options: { A: 'idealistic', B: 'practical', C: 'theoretical', D: 'imaginative' }, answer: 'B', explanation: 'Pragmatic means dealing with things sensibly and realistically.' },
+          { question: '数学二：定积分 ∫_0^1 x^2 dx 的值是？', options: { A: '1/2', B: '1/3', C: '1/4', D: '1/6' }, answer: 'B', explanation: '∫_0^1 x^2 dx = [x^3/3]_0^1 = 1/3。' }
+        ]
+      }
+      const mockQuestion = mockQuestions[petKey][Math.floor(Math.random() * mockQuestions[petKey].length)]
       const entry = { petKey, ...mockQuestion, generatedAt: nowISO(), answeredAt: null }
       quizCache.set(petKey, entry)
+      persistQuizState(petKey, entry)
       return { ...entry, status: 'pending' }
     }
 
@@ -698,8 +792,13 @@ async function generateQuiz(petKey) {
     const raw = data?.choices?.[0]?.message?.content || ''
     const parsed = parseQuizJson(raw)
     if (!parsed) throw new Error('题目格式解析失败')
+    if (isDuplicateQuiz(petKey, parsed.question) && retryCount < 2) {
+      return generateQuiz(petKey, retryCount + 1)
+    }
     const entry = { petKey, ...parsed, generatedAt: nowISO(), answeredAt: null }
     quizCache.set(petKey, entry)
+    persistQuizState(petKey, entry)
+    recordQuizQuestion(petKey, parsed.question)
     return { ...entry, status: 'pending' }
   } catch (e) {
     console.error('[quiz] generate failed:', e?.message || String(e))
@@ -731,6 +830,7 @@ function recordQuizAnswer({ petKey, selectedOption, username }) {
   entry.correct = correct
   entry.answeredBy = username
   quizCache.set(petKey, entry)
+  persistQuizState(petKey, entry)
 
   return { correct, happiness, explanation: entry.explanation, answer: entry.answer }
 }
@@ -1131,13 +1231,16 @@ app.post('/api/study/add', requireAuth, (req, res) => {
      DO UPDATE SET seconds = seconds + excluded.seconds, updated_at = ?`
   ).run(req.user.id, date, Math.floor(seconds), nowISO(), nowISO())
 
-  // 学习时长奖励积分：每 1 分钟 1 积分
-  const minutes = Math.floor(seconds / 60)
-  if (minutes > 0) {
-    addUserPoints(req.user.id, minutes * POINTS_PER_STUDY_MINUTE)
+  // 学习时长奖励积分：每满 1 小时加 1 积分
+  const total = readTodayStudySeconds(req.user.id, date)
+  const hours = Math.floor(total / 3600)
+  const row = db.prepare('SELECT points_awarded_hours FROM study_daily WHERE user_id = ? AND date = ?').get(req.user.id, date)
+  const awardedHours = Number(row?.points_awarded_hours || 0)
+  if (hours > awardedHours) {
+    addUserPoints(req.user.id, hours - awardedHours)
+    db.prepare('UPDATE study_daily SET points_awarded_hours = ? WHERE user_id = ? AND date = ?').run(hours, req.user.id, date)
   }
 
-  const total = readTodayStudySeconds(req.user.id, date)
   const inventory = readUserInventory(req.user.id)
   return res.json({ ok: true, date, todayStudySeconds: total, points: inventory.points })
 })
@@ -1214,7 +1317,8 @@ function buildEnglishQuizPrompt() {
    - 给出中文释义，让考生从 4 个英文单词中选择正确的英文单词（mode 为 "cn_to_en"）
 2. 题干明确，4 个选项分别标为 A、B、C、D。
 3. 单词难度适中，适合考研英语复习。
-4. 必须只返回 JSON，不要任何解释、问候、markdown、代码块。JSON 格式如下：
+4. 请避免与以下最近出过的单词/短语重复：${getSharedRecentContentsText()}。
+5. 必须只返回 JSON，不要任何解释、问候、markdown、代码块。JSON 格式如下：
 {"mode":"en_to_cn","question":"英文单词","options":{"A":"中文A","B":"中文B","C":"中文C","D":"中文D"},"answer":"A","explanation":"简要解析，说明正确选项和单词含义"}`
 }
 
@@ -1250,6 +1354,7 @@ async function generateEnglishQuiz() {
     const raw = data?.choices?.[0]?.message?.content || ''
     const parsed = parseQuizJson(raw)
     if (!parsed) throw new Error('题目格式解析失败')
+    addSharedRecentContent(parsed.question)
     const entry = { ...parsed, generatedAt: nowISO() }
     return { ...entry, status: 'pending' }
   } catch (e) {
@@ -1483,7 +1588,8 @@ function buildStickyNotePrompt({ username, slotIndex }) {
 主题：${meta.subject}${detail}
 要求：
 1. 必须给出具体内容，不要只写标题或空洞的“核心记忆点”。
-2. 内容要精炼、准确，适合贴在屏幕上看一眼记住。`
+2. 内容要精炼、准确，适合贴在屏幕上看一眼记住。
+3. 请避免与以下最近生成的内容重复：${getSharedRecentContentsText()}。`
 
   if (meta.type === 'english') {
     return `${baseInstruction}
@@ -1537,7 +1643,9 @@ async function generateStickyNote({ username, slotIndex }) {
       const raw = data?.choices?.[0]?.message?.content || ''
       const parsed = parseStickyNoteJson(raw)
       if (!parsed) throw new Error('格式解析失败')
-      return { title: String(parsed.title || ''), content: String(parsed.content || '') }
+      const title = String(parsed.title || '')
+      if (title) addSharedRecentContent(title)
+      return { title, content: String(parsed.content || '') }
     } catch (e) {
       lastError = e
       console.error(`[sticky-note] generate attempt ${attempt + 1} failed:`, e?.message || String(e))
