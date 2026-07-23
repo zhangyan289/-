@@ -220,6 +220,17 @@ export function migrateStudyDailyColumns(db) {
   }
 }
 
+export function resetPointsAfterRateChange(db) {
+  // 由于积分规则从“每分钟”改为“每满1小时”，历史小数积分需要清零
+  // 使用 shared_kv 标记保证只执行一次
+  const flag = db.prepare("SELECT value FROM shared_kv WHERE key = 'points_reset_rate_change_v1'").get()
+  if (flag) return
+  db.prepare('UPDATE user_pet_inventory SET points = 0').run()
+  db.prepare(
+    "INSERT INTO shared_kv (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+  ).run('points_reset_rate_change_v1', '1')
+}
+
 export function seedPetStatesIfEmpty(db) {
   const exists = db.prepare("SELECT 1 FROM pet_states LIMIT 1").get()
   if (exists) return

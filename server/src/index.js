@@ -7,7 +7,7 @@ import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
-import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, addUserPetInventoryColumns, migrateEnglishQuizTables, migrateStudyDailyColumns } from './db/database.js'
+import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, addUserPetInventoryColumns, migrateEnglishQuizTables, migrateStudyDailyColumns, resetPointsAfterRateChange } from './db/database.js'
 import { seedPresetUsers, seedSampleDataIfEmpty } from './db/seed.js'
 import { authRequired } from './middleware/auth.js'
 
@@ -83,6 +83,7 @@ migratePetStatesV2(db)
 addUserPetInventoryColumns(db)
 migrateEnglishQuizTables(db)
 migrateStudyDailyColumns(db)
+resetPointsAfterRateChange(db)
 seedPetStatesIfEmpty(db)
 seedPresetUsers(db)
 seedSampleDataIfEmpty(db)
@@ -632,7 +633,17 @@ function getSharedRecentContentsText() {
 function buildQuizPrompt(petKey) {
   const profile = QUIZ_PET_PROFILES[petKey]
   const subject = profile.subjects[Math.floor(Math.random() * profile.subjects.length)]
-  return `你是考研出题助手。请为"${profile.name}"（${profile.major}）出一道 "${subject.label}" 相关的选择题。
+
+  let subjectInstruction = ''
+  if (subject.key === 'english') {
+    subjectInstruction = `出一道英语一题目，考查考研英语核心词汇、语法、固定搭配或阅读理解能力。注意：必须是英语语言知识本身，不要混入计算机/数学/专业课内容；题干和选项使用英文。`
+  } else if (subject.key === 'math') {
+    subjectInstruction = `出一道数学一题目，考查高等数学、线性代数或概率论与数理统计。题干和选项使用中文，给出具体计算或推导。`
+  } else {
+    subjectInstruction = `出一道 "${subject.label}" 相关的选择题，考查计算机/专业课知识。题干和选项使用中文，内容要具体、有考点。`
+  }
+
+  return `你是考研出题助手。请为"${profile.name}"（${profile.major}）${subjectInstruction}
 要求：
 1. 题干明确，4 个选项分别标为 A、B、C、D。
 2. 难度适中，适合考研复习。
@@ -758,8 +769,8 @@ async function generateQuiz(petKey, retryCount = 0) {
         ],
         white: [
           { question: '自动控制系统的稳定性判据中，奈奎斯特判据主要用于？', options: { A: '时域分析', B: '频域分析', C: '根轨迹分析', D: '状态空间分析' }, answer: 'B', explanation: '奈奎斯特判据基于开环频率特性判断闭环稳定性。' },
-          { question: '英语二：Which word is closest in meaning to "pragmatic"?', options: { A: 'idealistic', B: 'practical', C: 'theoretical', D: 'imaginative' }, answer: 'B', explanation: 'Pragmatic means dealing with things sensibly and realistically.' },
-          { question: '数学二：定积分 ∫_0^1 x^2 dx 的值是？', options: { A: '1/2', B: '1/3', C: '1/4', D: '1/6' }, answer: 'B', explanation: '∫_0^1 x^2 dx = [x^3/3]_0^1 = 1/3。' }
+          { question: '英语一：Which word is closest in meaning to "pragmatic"?', options: { A: 'idealistic', B: 'practical', C: 'theoretical', D: 'imaginative' }, answer: 'B', explanation: 'Pragmatic means dealing with things sensibly and realistically.' },
+          { question: '数学一：函数 f(x) = x^3 - 3x 的极大值点是？', options: { A: 'x = -1', B: 'x = 0', C: 'x = 1', D: 'x = 2' }, answer: 'A', explanation: 'f\'(x)=3x^2-3，令其为 0 得 x=±1，f"(-1)<0，故 x=-1 为极大值点。' }
         ]
       }
       const mockQuestion = mockQuestions[petKey][Math.floor(Math.random() * mockQuestions[petKey].length)]
