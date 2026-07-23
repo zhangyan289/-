@@ -1913,7 +1913,79 @@ async function deleteTodo(todo) {
 const running = ref(false)
 let startedAtMs = 0
 let pingTimer = null
+const STUDY_TIMER_KEY = 'study_timer_v1'
 
+function saveStudyTimerState() {
+  try {
+    localStorage.setItem(STUDY_TIMER_KEY, JSON.stringify({
+      running: running.value,
+      startedAtMs,
+      date: todayIsoString()
+    }))
+  } catch (_) {}
+}
+
+function loadStudyTimerState() {
+  try {
+    const raw = localStorage.getItem(STUDY_TIMER_KEY)
+    if (!raw) return
+    const state = JSON.parse(raw)
+    if (state.date !== todayIsoString()) {
+      localStorage.removeItem(STUDY_TIMER_KEY)
+      return
+    }
+    if (state.running && state.startedAtMs) {
+      running.value = true
+      startedAtMs = state.startedAtMs
+      pingTimer = setInterval(async () => {
+        const saved = JSON.parse(localStorage.getItem(STUDY_TIMER_KEY) || '{}')
+        if (saved.date && saved.date !== todayIsoString()) {
+          const delta = Math.floor((Date.now() - startedAtMs) / 1000)
+          if (delta > 0) {
+            startedAtMs = Date.now()
+            await flushStudyDelta(delta)
+            await refresh()
+          } else {
+            startedAtMs = Date.now()
+          }
+          saveStudyTimerState()
+          return
+        }
+        const delta = Math.floor((Date.now() - startedAtMs) / 1000)
+        if (delta >= 10) {
+          startedAtMs = Date.now()
+          await flushStudyDelta(delta)
+          await refresh()
+          saveStudyTimerState()
+        }
+      }, 1000)
+    }
+  } catch (_) {}
+}
+
+function clearStudyTimerState() {
+  try {
+    localStorage.removeItem(STUDY_TIMER_KEY)
+  } catch (_) {}
+}
+
+function onBeforeUnloadStudy() {
+  if (!running.value || !startedAtMs) return
+  const delta = Math.floor((Date.now() - startedAtMs) / 1000)
+  if (delta > 0) {
+    try {
+      const token = localStorage.getItem('token')
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/study/add', false)
+      xhr.setRequestHeader('Content-Type', 'application/json')
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.send(JSON.stringify({ seconds: delta }))
+    } catch (_) {}
+  }
+  // 刷新/关闭后，新页面从当前时间点继续计时，避免已 flush 的时长重复累加
+  startedAtMs = Date.now()
+  saveStudyTimerState()
+}
 // 番茄钟（Pomodoro）：本地倒计时，不影响学习计时上报
 const POMO_STATE_KEY_BASE = 'pomodoroState'
 function pomoStorageKeyFor(username) {
@@ -2086,14 +2158,30 @@ async function toggleTimer() {
     if (!running.value) {
       running.value = true
       startedAtMs = Date.now()
+      saveStudyTimerState()
       pingTimer = setInterval(async () => {
+        const saved = JSON.parse(localStorage.getItem(STUDY_TIMER_KEY) || '{}')
+        if (saved.date && saved.date !== todayIsoString()) {
+          // 跨天了：把旧日时长 flush，重置计时起点
+          const delta = Math.floor((Date.now() - startedAtMs) / 1000)
+          if (delta > 0) {
+            startedAtMs = Date.now()
+            await flushStudyDelta(delta)
+            await refresh()
+          } else {
+            startedAtMs = Date.now()
+          }
+          saveStudyTimerState()
+          return
+        }
         const delta = Math.floor((Date.now() - startedAtMs) / 1000)
-        if (delta >= 60) {
+        if (delta >= 10) {
           startedAtMs = Date.now()
           await flushStudyDelta(delta)
           await refresh()
+          saveStudyTimerState()
         }
-      }, 15000)
+      }, 1000)
     } else {
       running.value = false
       if (pingTimer) clearInterval(pingTimer)
@@ -2102,6 +2190,7 @@ async function toggleTimer() {
       startedAtMs = 0
       await flushStudyDelta(delta)
       await refresh()
+      clearStudyTimerState()
     }
   } catch (e) {
     error.value = e?.message || String(e)
@@ -2112,6 +2201,7 @@ onMounted(async () => {
   readFullscreenState()
   document.addEventListener('fullscreenchange', readFullscreenState)
   document.addEventListener('webkitfullscreenchange', readFullscreenState)
+  window.addEventListener('beforeunload', onBeforeUnloadStudy)
 
   bgSceneId.value = clampSceneId(localStorage.getItem(BG_SCENE_STORAGE_KEY) || 1)
   emitSceneId(bgSceneId.value)
@@ -2134,6 +2224,7 @@ onMounted(async () => {
   }
   loadCountdownCache()
   await refresh()
+  loadStudyTimerState()
   await loadPresence()
   presenceTimer = setInterval(() => {
     loadPresence()
@@ -2149,6 +2240,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', readFullscreenState)
   document.removeEventListener('webkitfullscreenchange', readFullscreenState)
+  window.removeEventListener('beforeunload', onBeforeUnloadStudy)
 
   if (clockTimer) clearInterval(clockTimer)
   if (pingTimer) clearInterval(pingTimer)
