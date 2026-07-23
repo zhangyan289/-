@@ -603,8 +603,8 @@ const QUIZ_PET_PROFILES = {
     name: '小白',
     major: '电子信息（0854）',
     subjects: [
-      { label: '英语二', key: 'english' },
-      { label: '数学二', key: 'math' },
+      { label: '英语一', key: 'english' },
+      { label: '数学一', key: 'math' },
       { label: '自动控制原理', key: 'control' },
       { label: '现代控制理论', key: 'modern_control' }
     ]
@@ -1548,13 +1548,13 @@ const STICKY_NOTE_SLOTS = {
     { type: 'cs408', label: '408', subject: '计算机专业基础综合（数据结构、计算机组成原理、操作系统、计算机网络）' }
   ],
   小白: [
-    { type: 'english', label: '英语', subject: '考研英语' },
-    { type: 'math', label: '数学', subject: '考研数学' },
+    { type: 'english', label: '英语一', subject: '考研英语一' },
+    { type: 'math', label: '数学一', subject: '考研数学一（高等数学、线性代数、概率论与数理统计）' },
     { type: 'specialty', label: '专业课', subject: '专业课（自动控制原理 / 现代控制理论）' }
   ],
   userB: [
-    { type: 'english', label: '英语', subject: '考研英语' },
-    { type: 'math', label: '数学', subject: '考研数学' },
+    { type: 'english', label: '英语一', subject: '考研英语一' },
+    { type: 'math', label: '数学一', subject: '考研数学一（高等数学、线性代数、概率论与数理统计）' },
     { type: 'specialty', label: '专业课', subject: '专业课（自动控制原理 / 现代控制理论）' }
   ]
 }
