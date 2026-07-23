@@ -231,6 +231,16 @@ export function resetPointsAfterRateChange(db) {
   ).run('points_reset_rate_change_v1', '1')
 }
 
+export function clearPetQuizStateAfterSubjectChange(db) {
+  // 移除英语科目后，清空已有的桌宠答题缓存，避免再出现旧的英语题
+  const flag = db.prepare("SELECT value FROM shared_kv WHERE key = 'pet_quiz_clear_english_v1'").get()
+  if (flag) return
+  db.prepare('DELETE FROM pet_quiz_state').run()
+  db.prepare(
+    "INSERT INTO shared_kv (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+  ).run('pet_quiz_clear_english_v1', '1')
+}
+
 export function seedPetStatesIfEmpty(db) {
   const exists = db.prepare("SELECT 1 FROM pet_states LIMIT 1").get()
   if (exists) return
