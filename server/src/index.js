@@ -735,6 +735,15 @@ function recordQuizAnswer({ petKey, selectedOption, username }) {
   return { correct, happiness, explanation: entry.explanation, answer: entry.answer }
 }
 
+function getQuizStatus(petKey) {
+  const entry = quizCache.get(petKey)
+  if (!entry) return { status: 'pending', hasQuestion: false }
+  if (!isQuizAvailable(entry)) {
+    return { status: 'cooldown', nextAt: addMinutesISO(entry.answeredAt, QUIZ_COOLDOWN_MINUTES) }
+  }
+  return { status: 'pending', hasQuestion: true }
+}
+
 function feedPet({ userId, username, petKey, foodKey }) {
   const food = FOOD_CONFIG[petKey]?.[foodKey]
   if (!food) throw new Error('未知食物')
@@ -1153,6 +1162,17 @@ app.get('/api/pets/state', requireAuth, (req, res) => {
 
 app.get('/api/pets/feed-log', requireAuth, (req, res) => {
   return res.json({ date: todayISO(), logs: getTodayFeedLog() })
+})
+
+app.get('/api/pets/quiz/status', requireAuth, (req, res) => {
+  const petKey = String(req.query?.petKey || '').trim()
+  if (!petKey || !QUIZ_PET_PROFILES[petKey]) return res.status(400).json({ error: '缺少或无效 petKey' })
+  try {
+    const status = getQuizStatus(petKey)
+    return res.json(status)
+  } catch (e) {
+    return res.status(400).json({ error: e.message })
+  }
 })
 
 app.get('/api/pets/quiz', requireAuth, async (req, res) => {

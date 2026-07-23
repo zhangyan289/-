@@ -185,9 +185,13 @@ onMounted(() => {
   pets.value.forEach((p) => { p.y = baseY.value })
   loadPetState()
   loadFeedLog()
+  loadQuizStatus('golden')
+  loadQuizStatus('white')
   pollTimer = setInterval(() => {
     loadPetState()
     loadFeedLog()
+    loadQuizStatus('golden')
+    loadQuizStatus('white')
   }, 15000)
   window.addEventListener('resize', onResize)
 })
@@ -196,6 +200,20 @@ onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer)
   window.removeEventListener('resize', onResize)
 })
+
+async function loadQuizStatus(petKey) {
+  try {
+    const data = await fetchJSON(`/api/pets/quiz/status?petKey=${encodeURIComponent(petKey)}`)
+    if (data?.status === 'cooldown') {
+      quizAvailability.value[petKey] = 'cooldown'
+      if (!petQuote.value[petKey]) petQuote.value[petKey] = pickQuote()
+    } else {
+      quizAvailability.value[petKey] = 'pending'
+    }
+  } catch {
+    // ignore
+  }
+}
 
 function onResize() {
   pets.value.forEach((p) => {

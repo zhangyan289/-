@@ -130,7 +130,8 @@ const panelStyle = computed(() => ({
 
 function setInitialPosition() {
   const h = typeof window !== 'undefined' ? window.innerHeight : 800
-  panelY.value = Math.max(80, h - 340)
+  const panelHeight = 500
+  panelY.value = Math.max(80, h - panelHeight - 8)
 }
 
 onMounted(() => {
@@ -150,7 +151,7 @@ function onResize() {
   const w = typeof window !== 'undefined' ? window.innerWidth : 1200
   const h = typeof window !== 'undefined' ? window.innerHeight : 800
   const panelW = 320
-  const panelH = 420
+  const panelH = 500
   panelX.value = Math.max(8, Math.min(w - panelW - 8, panelX.value))
   panelY.value = Math.max(8, Math.min(h - panelH - 8, panelY.value))
 }
@@ -192,7 +193,7 @@ function onHeaderPointerMove(e) {
   const w = typeof window !== 'undefined' ? window.innerWidth : 1200
   const h = typeof window !== 'undefined' ? window.innerHeight : 800
   const panelW = 320
-  const panelH = 420
+  const panelH = 500
   panelX.value = Math.max(8, Math.min(w - panelW - 8, e.clientX - drag.offsetX))
   panelY.value = Math.max(8, Math.min(h - panelH - 8, e.clientY - drag.offsetY))
 }

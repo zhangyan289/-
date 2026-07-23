@@ -1196,20 +1196,28 @@ const todoUserOnline = computed(() => isUserOnline(todoUser.value?.username))
 // Todo 打开时更高频刷新今日秒数（近实时看到对方变化）
 let todoLiveTimer = null
 
-async function refreshOverviewSecondsOnly() {
+async function refreshOverviewForTodo() {
   try {
     const overview = await apiGet('/api/overview/today')
     const byName = new Map(
       (Array.isArray(overview?.users) ? overview.users : []).map((u) => [
         u.username,
-        { todayStudySeconds: Number(u?.todayStudySeconds || 0), runawayMarks: Number(u?.runawayMarks || 0) }
+        {
+          todos: u?.todos,
+          todayStudySeconds: Number(u?.todayStudySeconds || 0),
+          runawayMarks: Number(u?.runawayMarks || 0)
+        }
       ])
     )
     users.value = (users.value || []).map((u) => {
       if (!u?.username) return u
       const incoming = byName.get(u.username)
       if (!incoming) return u
-      return { ...u, todayStudySeconds: incoming.todayStudySeconds, runawayMarks: incoming.runawayMarks }
+      const next = { ...u }
+      if (Array.isArray(incoming.todos)) next.todos = incoming.todos
+      if (incoming.todayStudySeconds !== undefined) next.todayStudySeconds = incoming.todayStudySeconds
+      if (incoming.runawayMarks !== undefined) next.runawayMarks = incoming.runawayMarks
+      return next
     })
   } catch (_) {
     // ignore
@@ -1220,9 +1228,9 @@ watch(showTodo, (open) => {
   if (todoLiveTimer) clearInterval(todoLiveTimer)
   todoLiveTimer = null
   if (!open) return
-  refreshOverviewSecondsOnly()
+  refreshOverviewForTodo()
   todoLiveTimer = setInterval(() => {
-    refreshOverviewSecondsOnly()
+    refreshOverviewForTodo()
   }, 5000)
 })
 

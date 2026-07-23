@@ -6,16 +6,6 @@
     aria-label="便利贴"
     @pointerdown="onContainerPointerDown"
   >
-    <div class="sticky-notes-user-header">
-      <img
-        class="sticky-notes-avatar"
-        :src="getAvatarSrc(myUsername)"
-        :alt="displayName(myUsername)"
-        draggable="false"
-        @dragstart.prevent
-      />
-      <span class="sticky-notes-user-name">{{ displayName(myUsername) }}</span>
-    </div>
     <div class="sticky-notes-list">
       <div
         v-for="note in myNotes"
@@ -188,21 +178,23 @@ onBeforeUnmount(() => {
 
 /* 自定义滚动条 */
 .sticky-notes-container::-webkit-scrollbar{
-  width: 6px;
+  width: 8px;
 }
 
 .sticky-notes-container::-webkit-scrollbar-track{
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.35);
   border-radius: 999px;
+  border: 1px solid rgba(60, 40, 20, 0.12);
 }
 
 .sticky-notes-container::-webkit-scrollbar-thumb{
-  background: rgba(120, 100, 80, 0.45);
+  background: rgba(60, 40, 20, 0.85);
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .sticky-notes-container::-webkit-scrollbar-thumb:hover{
-  background: rgba(120, 100, 80, 0.65);
+  background: rgba(60, 40, 20, 1);
 }
 
 .sticky-notes-user-header{
@@ -218,6 +210,24 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   cursor: default;
   flex-shrink: 0;
+}
+
+.sticky-notes-avatar{
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+  display: block;
+  max-width: 28px;
+  max-height: 28px;
+}
+
+.sticky-notes-user-name{
+  font-weight: 950;
+  font-size: 13px;
+  color: rgba(40, 20, 10, 0.9);
 }
 
 .sticky-notes-list{
