@@ -360,7 +360,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bokeh') {
-    const count = 14
+    const count = 10
     const blobs = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 31.3
       const rr = 70 + fxRand(s + 1) * 170
@@ -488,7 +488,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'butterflies') {
-    const count = 16
+    const count = 12
     const butterflies = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 29.7
       const speed = (0.06 + fxRand(s + 1) * 0.12) * Math.min(w, h)
@@ -602,7 +602,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'bubbles') {
-    const count = 33
+    const count = 24
     const bubbles = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 23.7
       return {
@@ -624,7 +624,7 @@ function initFxState(type, w, h) {
   }
 
   if (type === 'birds') {
-    const count = 9
+    const count = 6
     const birds = Array.from({ length: count }, (_, i) => {
       const s = seedBase + i * 41.1
       return {

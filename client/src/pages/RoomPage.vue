@@ -3663,9 +3663,10 @@ watchEffect(() => {
 
 .todo-text{
   font-weight: 900;
-  white-space: normal;
+  white-space: normal !important;
   overflow: visible;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-all;
   color: rgba(20, 10, 18, 0.92);
   line-height: 1.5;
   flex: 1 1 auto;
