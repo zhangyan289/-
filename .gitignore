@@ -25,3 +25,4 @@ server/.env
 # 原始桌宠素材（已处理到 client/public/assets/user/pets/）
 小白桌宠素材/
 小鸡毛桌宠素材/
+.deploy-now.py
