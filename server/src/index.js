@@ -7,7 +7,7 @@ import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
-import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, addUserPetInventoryColumns, migrateEnglishQuizTables, migrateStudyDailyColumns, resetPointsAfterRateChange, clearPetQuizStateAfterSubjectChange } from './db/database.js'
+import { openDb, initSchema, todayISO, seedPetStatesIfEmpty, migratePetStatesV2, migratePetLastDecayHour, addUserPetInventoryColumns, migrateEnglishQuizTables, migrateStudyDailyColumns, resetPointsAfterRateChange, clearPetQuizStateAfterSubjectChange } from './db/database.js'
 import { seedPresetUsers, seedSampleDataIfEmpty } from './db/seed.js'
 import { authRequired } from './middleware/auth.js'
 
@@ -85,6 +85,7 @@ migrateEnglishQuizTables(db)
 migrateStudyDailyColumns(db)
 resetPointsAfterRateChange(db)
 clearPetQuizStateAfterSubjectChange(db)
+migratePetLastDecayHour(db)
 seedPetStatesIfEmpty(db)
 seedPresetUsers(db)
 seedSampleDataIfEmpty(db)
@@ -431,13 +432,32 @@ function readPetStates() {
   return db.prepare('SELECT * FROM pet_states ORDER BY pet_key ASC').all()
 }
 
+function getCurrentHourISO() {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd} ${hh}:00:00`
+}
+
+function hoursBetweenHourISO(a, b) {
+  if (!a || !b) return 0
+  const t1 = new Date(a).getTime()
+  const t2 = new Date(b).getTime()
+  if (!Number.isFinite(t1) || !Number.isFinite(t2)) return 0
+  return Math.max(0, Math.floor((t2 - t1) / (3600 * 1000)))
+}
+
 function applyPetDecay(state) {
   if (!state) return state
-  const updatedAt = state.updated_at || nowISO()
-  const hours = hoursBetweenISO(updatedAt, nowISO())
-  if (hours <= 0) return state
 
-  // 愉悦度自然衰减：24h 从 100 降到 0
+  // 按整点小时差计算自然衰减，每跨一个整点扣 5 点愉悦度
+  const currentHour = getCurrentHourISO()
+  const lastDecayHour = state.last_decay_hour || currentHour
+  const hours = hoursBetweenHourISO(lastDecayHour, currentHour)
+
+  // 愉悦度自然衰减：每整点扣 5
   let happiness = clampStat((state.happiness || 0) - hours * PET_HAPPINESS_DECAY_PER_HOUR)
 
   // 进食状态到期自动结束
@@ -448,7 +468,7 @@ function applyPetDecay(state) {
     eatingUntil = null
   }
 
-  // 离家出走判定：愉悦度 0 持续 6h
+  // 离家出走判定：愉悦度 0 持续 3h
   let runaway = state.runaway || 0
   let runawaySince = state.runaway_since
   if (happiness <= 0) {
@@ -474,6 +494,7 @@ function applyPetDecay(state) {
   state.eating_state = eatingState
   state.eating_until = eatingUntil
   state.feed_cooldown_until = cooldownUntil
+  state.last_decay_hour = currentHour
   return state
 }
 
@@ -481,7 +502,7 @@ function persistPetDecay(state) {
   if (!state) return
   db.prepare(
     `UPDATE pet_states
-     SET happiness = ?, runaway = ?, runaway_since = ?, eating_state = ?, eating_until = ?, feed_cooldown_until = ?, updated_at = ?
+     SET happiness = ?, runaway = ?, runaway_since = ?, eating_state = ?, eating_until = ?, feed_cooldown_until = ?, last_decay_hour = ?, updated_at = ?
      WHERE pet_key = ?`
   ).run(
     state.happiness,
@@ -490,6 +511,7 @@ function persistPetDecay(state) {
     state.eating_state || null,
     state.eating_until || null,
     state.feed_cooldown_until || null,
+    state.last_decay_hour || getCurrentHourISO(),
     nowISO(),
     state.pet_key
   )
@@ -502,6 +524,19 @@ function decayAndGetState(petKey) {
   persistPetDecay(state)
   return state
 }
+
+function applyHourlyDecay() {
+  try {
+    const states = readPetStates()
+    for (const s of states) applyPetDecay(s)
+    for (const s of states) persistPetDecay(s)
+  } catch (err) {
+    console.error('[applyHourlyDecay] error:', err)
+  }
+}
+
+// 后台定时衰减：每分钟检查一次整点跨越，确保离线时也会扣减
+setInterval(applyHourlyDecay, 60 * 1000)
 
 function readUserInventory(userId) {
   let row = db.prepare('SELECT points, runaway_marks FROM user_pet_inventory WHERE user_id = ?').get(userId)

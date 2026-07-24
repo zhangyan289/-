@@ -62,6 +62,7 @@ export function initSchema(db) {
       last_fed_by TEXT,
       current_state TEXT,
       current_state_updated_at TEXT DEFAULT (datetime('now')),
+      last_decay_hour TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -143,6 +144,25 @@ export function migratePetStatesV2(db) {
   if (!hasCurrentState) {
     db.prepare('ALTER TABLE pet_states ADD COLUMN current_state TEXT').run()
     db.prepare('ALTER TABLE pet_states ADD COLUMN current_state_updated_at TEXT').run()
+  }
+}
+
+function hourISOForMigration() {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd} ${hh}:00:00`
+}
+
+export function migratePetLastDecayHour(db) {
+  const cols = db.prepare("PRAGMA table_info(pet_states)").all()
+  const hasLastDecayHour = cols.some((c) => c.name === 'last_decay_hour')
+  if (!hasLastDecayHour) {
+    db.prepare('ALTER TABLE pet_states ADD COLUMN last_decay_hour TEXT').run()
+    const currentHour = hourISOForMigration()
+    db.prepare('UPDATE pet_states SET last_decay_hour = ?').run(currentHour)
   }
 }
 
@@ -246,12 +266,13 @@ export function seedPetStatesIfEmpty(db) {
   if (exists) return
   const now = new Date()
   const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+  const hourStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:00:00`
   db.prepare(
-    `INSERT INTO pet_states (pet_key, happiness, updated_at) VALUES (?, ?, ?)`
-  ).run('golden', 70, nowStr)
+    `INSERT INTO pet_states (pet_key, happiness, last_decay_hour, updated_at) VALUES (?, ?, ?, ?)`
+  ).run('golden', 70, hourStr, nowStr)
   db.prepare(
-    `INSERT INTO pet_states (pet_key, happiness, updated_at) VALUES (?, ?, ?)`
-  ).run('white', 70, nowStr)
+    `INSERT INTO pet_states (pet_key, happiness, last_decay_hour, updated_at) VALUES (?, ?, ?, ?)`
+  ).run('white', 70, hourStr, nowStr)
 }
 
 export function todayISO() {
