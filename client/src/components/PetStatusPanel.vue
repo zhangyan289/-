@@ -114,6 +114,9 @@ let pointsChangeTimer = null
 
 const panelX = ref(24)
 const panelY = ref(0)
+const countdownNow = ref(Date.now())
+let countdownTimer = null
+const RUNAWAY_THRESHOLD_MS = 3 * 60 * 60 * 1000
 
 const drag = {
   active: false,
